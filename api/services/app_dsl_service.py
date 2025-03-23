@@ -35,10 +35,12 @@ logger = logging.getLogger(__name__)
 IMPORT_INFO_REDIS_KEY_PREFIX = "app_import_info:"
 CHECK_DEPENDENCIES_REDIS_KEY_PREFIX = "app_check_dependencies:"
 IMPORT_INFO_REDIS_EXPIRY = 10 * 60  # 10 minutes
+# NOTE: 笑死，这个DLS尺寸还有大小
 DSL_MAX_SIZE = 10 * 1024 * 1024  # 10MB
 CURRENT_DSL_VERSION = "0.1.5"
 
 
+# NOTE: 英雄所见略同，我也喜欢用StrEnum
 class ImportMode(StrEnum):
     YAML_CONTENT = "yaml-content"
     YAML_URL = "yaml-url"
@@ -73,7 +75,10 @@ def _check_version_compatibility(imported_version: str) -> ImportStatus:
         return ImportStatus.FAILED
 
     # Compare major version and minor version
-    if current_ver.major != imported_ver.major or current_ver.minor != imported_ver.minor:
+    if (
+        current_ver.major != imported_ver.major
+        or current_ver.minor != imported_ver.minor
+    ):
         return ImportStatus.PENDING
 
     if current_ver.micro != imported_ver.micro:
@@ -99,6 +104,7 @@ class CheckDependenciesPendingData(BaseModel):
 
 
 class AppDslService:
+    # NOTE: 好好好，SQL的session
     def __init__(self, session: Session):
         self._session = session
 
@@ -141,9 +147,14 @@ class AppDslService:
                     and parsed_url.netloc == "github.com"
                     and parsed_url.path.endswith((".yml", ".yaml"))
                 ):
-                    yaml_url = yaml_url.replace("https://github.com", "https://raw.githubusercontent.com")
+                    yaml_url = yaml_url.replace(
+                        "https://github.com", "https://raw.githubusercontent.com"
+                    )
                     yaml_url = yaml_url.replace("/blob/", "/")
-                response = ssrf_proxy.get(yaml_url.strip(), follow_redirects=True, timeout=(10, 10))
+                # NOTE: 看样子这儿是联网获取yaml配置文件
+                response = ssrf_proxy.get(
+                    yaml_url.strip(), follow_redirects=True, timeout=(10, 10)
+                )
                 response.raise_for_status()
                 content = response.content.decode()
 
@@ -166,6 +177,7 @@ class AppDslService:
                     status=ImportStatus.FAILED,
                     error=f"Error fetching YAML from URL: {str(e)}",
                 )
+        # NOTE: 多数情况下，我们应该使用的是这个
         elif mode == ImportMode.YAML_CONTENT:
             if not yaml_content:
                 return Import(
@@ -195,7 +207,9 @@ class AppDslService:
             imported_version = data.get("version", "0.1.0")
             # check if imported_version is a float-like string
             if not isinstance(imported_version, str):
-                raise ValueError(f"Invalid version type, expected str, got {type(imported_version)}")
+                raise ValueError(
+                    f"Invalid version type, expected str, got {type(imported_version)}"
+                )
             status = _check_version_compatibility(imported_version)
 
             # Extract app data
@@ -210,7 +224,9 @@ class AppDslService:
             # If app_id is provided, check if it exists
             app = None
             if app_id:
-                stmt = select(App).where(App.id == app_id, App.tenant_id == account.current_tenant_id)
+                stmt = select(App).where(
+                    App.id == app_id, App.tenant_id == account.current_tenant_id
+                )
                 app = self._session.scalar(stmt)
 
                 if not app:
@@ -220,7 +236,10 @@ class AppDslService:
                         error="App not found",
                     )
 
-                if app.mode not in [AppMode.WORKFLOW.value, AppMode.ADVANCED_CHAT.value]:
+                if app.mode not in [
+                    AppMode.WORKFLOW.value,
+                    AppMode.ADVANCED_CHAT.value,
+                ]:
                     return Import(
                         id=import_id,
                         status=ImportStatus.FAILED,
@@ -256,16 +275,24 @@ class AppDslService:
             dependencies = data.get("dependencies", [])
             check_dependencies_pending_data = None
             if dependencies:
-                check_dependencies_pending_data = [PluginDependency.model_validate(d) for d in dependencies]
+                check_dependencies_pending_data = [
+                    PluginDependency.model_validate(d) for d in dependencies
+                ]
             elif imported_version <= "0.1.5":
                 if "workflow" in data:
                     graph = data.get("workflow", {}).get("graph", {})
-                    dependencies_list = self._extract_dependencies_from_workflow_graph(graph)
+                    dependencies_list = self._extract_dependencies_from_workflow_graph(
+                        graph
+                    )
                 else:
-                    dependencies_list = self._extract_dependencies_from_model_config(data.get("model_config", {}))
+                    dependencies_list = self._extract_dependencies_from_model_config(
+                        data.get("model_config", {})
+                    )
 
-                check_dependencies_pending_data = DependenciesAnalysisService.generate_latest_dependencies(
-                    dependencies_list
+                check_dependencies_pending_data = (
+                    DependenciesAnalysisService.generate_latest_dependencies(
+                        dependencies_list
+                    )
                 )
 
             # Create or update app
@@ -329,7 +356,10 @@ class AppDslService:
 
             app = None
             if pending_data.app_id:
-                stmt = select(App).where(App.id == pending_data.app_id, App.tenant_id == account.current_tenant_id)
+                stmt = select(App).where(
+                    App.id == pending_data.app_id,
+                    App.tenant_id == account.current_tenant_id,
+                )
                 app = self._session.scalar(stmt)
 
             # Create or update app
@@ -417,10 +447,14 @@ class AppDslService:
         if app:
             # Update existing app
             app.name = name or app_data.get("name", app.name)
-            app.description = description or app_data.get("description", app.description)
+            app.description = description or app_data.get(
+                "description", app.description
+            )
             app.icon_type = icon_type
             app.icon = icon
-            app.icon_background = icon_background or app_data.get("icon_background", app.icon_background)
+            app.icon_background = icon_background or app_data.get(
+                "icon_background", app.icon_background
+            )
             app.updated_by = account.id
         else:
             if account.current_tenant_id is None:
@@ -435,7 +469,9 @@ class AppDslService:
             app.description = description or app_data.get("description", "")
             app.icon_type = icon_type
             app.icon = icon
-            app.icon_background = icon_background or app_data.get("icon_background", "#FFFFFF")
+            app.icon_background = icon_background or app_data.get(
+                "icon_background", "#FFFFFF"
+            )
             app.enable_site = True
             app.enable_api = True
             app.use_icon_as_answer_icon = app_data.get("use_icon_as_answer_icon", False)
@@ -451,7 +487,9 @@ class AppDslService:
             redis_client.setex(
                 f"{CHECK_DEPENDENCIES_REDIS_KEY_PREFIX}{app.id}",
                 IMPORT_INFO_REDIS_EXPIRY,
-                CheckDependenciesPendingData(app_id=app.id, dependencies=dependencies).model_dump_json(),
+                CheckDependenciesPendingData(
+                    app_id=app.id, dependencies=dependencies
+                ).model_dump_json(),
             )
 
         # Initialize app based on mode
@@ -462,13 +500,18 @@ class AppDslService:
 
             environment_variables_list = workflow_data.get("environment_variables", [])
             environment_variables = [
-                variable_factory.build_environment_variable_from_mapping(obj) for obj in environment_variables_list
+                variable_factory.build_environment_variable_from_mapping(obj)
+                for obj in environment_variables_list
             ]
-            conversation_variables_list = workflow_data.get("conversation_variables", [])
+            conversation_variables_list = workflow_data.get(
+                "conversation_variables", []
+            )
             conversation_variables = [
-                variable_factory.build_conversation_variable_from_mapping(obj) for obj in conversation_variables_list
+                variable_factory.build_conversation_variable_from_mapping(obj)
+                for obj in conversation_variables_list
             ]
 
+            # MOTE: 初始workflow的服务器，然后开始执行
             workflow_service = WorkflowService()
             current_draft_workflow = workflow_service.get_draft_workflow(app_model=app)
             if current_draft_workflow:
@@ -488,7 +531,9 @@ class AppDslService:
             # Initialize model config
             model_config = data.get("model_config")
             if not model_config or not isinstance(model_config, dict):
-                raise ValueError("Missing model_config for chat/agent-chat/completion app")
+                raise ValueError(
+                    "Missing model_config for chat/agent-chat/completion app"
+                )
             # Initialize or update model config
             if not app.app_model_config:
                 app_model_config = AppModelConfig().from_model_config_dict(model_config)
@@ -500,7 +545,9 @@ class AppDslService:
                 app.app_model_config_id = app_model_config.id
 
                 self._session.add(app_model_config)
-                app_model_config_was_updated.send(app, app_model_config=app_model_config)
+                app_model_config_was_updated.send(
+                    app, app_model_config=app_model_config
+                )
         else:
             raise ValueError("Invalid app mode")
         return app
@@ -521,7 +568,9 @@ class AppDslService:
                 "name": app_model.name,
                 "mode": app_model.mode,
                 "icon": "🤖" if app_model.icon_type == "image" else app_model.icon,
-                "icon_background": "#FFEAD5" if app_model.icon_type == "image" else app_model.icon_background,
+                "icon_background": "#FFEAD5"
+                if app_model.icon_type == "image"
+                else app_model.icon_background,
                 "description": app_model.description,
                 "use_icon_as_answer_icon": app_model.use_icon_as_answer_icon,
             },
@@ -529,7 +578,9 @@ class AppDslService:
 
         if app_mode in {AppMode.ADVANCED_CHAT, AppMode.WORKFLOW}:
             cls._append_workflow_export_data(
-                export_data=export_data, app_model=app_model, include_secret=include_secret
+                export_data=export_data,
+                app_model=app_model,
+                include_secret=include_secret,
             )
         else:
             cls._append_model_config_export_data(export_data, app_model)
@@ -537,7 +588,9 @@ class AppDslService:
         return yaml.dump(export_data, allow_unicode=True)  # type: ignore
 
     @classmethod
-    def _append_workflow_export_data(cls, *, export_data: dict, app_model: App, include_secret: bool) -> None:
+    def _append_workflow_export_data(
+        cls, *, export_data: dict, app_model: App, include_secret: bool
+    ) -> None:
         """
         Append workflow export data
         :param export_data: export data
@@ -558,7 +611,9 @@ class AppDslService:
         ]
 
     @classmethod
-    def _append_model_config_export_data(cls, export_data: dict, app_model: App) -> None:
+    def _append_model_config_export_data(
+        cls, export_data: dict, app_model: App
+    ) -> None:
         """
         Append model config export data
         :param export_data: export data
@@ -569,7 +624,9 @@ class AppDslService:
             raise ValueError("Missing app configuration, please check.")
 
         export_data["model_config"] = app_model_config.to_dict()
-        dependencies = cls._extract_dependencies_from_model_config(app_model_config.to_dict())
+        dependencies = cls._extract_dependencies_from_model_config(
+            app_model_config.to_dict()
+        )
         export_data["dependencies"] = [
             jsonable_encoder(d.model_dump())
             for d in DependenciesAnalysisService.generate_dependencies(
@@ -603,29 +660,39 @@ class AppDslService:
                     case NodeType.TOOL.value:
                         tool_entity = ToolNodeData(**node["data"])
                         dependencies.append(
-                            DependenciesAnalysisService.analyze_tool_dependency(tool_entity.provider_id),
+                            DependenciesAnalysisService.analyze_tool_dependency(
+                                tool_entity.provider_id
+                            ),
                         )
                     case NodeType.LLM.value:
                         llm_entity = LLMNodeData(**node["data"])
                         dependencies.append(
-                            DependenciesAnalysisService.analyze_model_provider_dependency(llm_entity.model.provider),
+                            DependenciesAnalysisService.analyze_model_provider_dependency(
+                                llm_entity.model.provider
+                            ),
                         )
                     case NodeType.QUESTION_CLASSIFIER.value:
-                        question_classifier_entity = QuestionClassifierNodeData(**node["data"])
+                        question_classifier_entity = QuestionClassifierNodeData(
+                            **node["data"]
+                        )
                         dependencies.append(
                             DependenciesAnalysisService.analyze_model_provider_dependency(
                                 question_classifier_entity.model.provider
                             ),
                         )
                     case NodeType.PARAMETER_EXTRACTOR.value:
-                        parameter_extractor_entity = ParameterExtractorNodeData(**node["data"])
+                        parameter_extractor_entity = ParameterExtractorNodeData(
+                            **node["data"]
+                        )
                         dependencies.append(
                             DependenciesAnalysisService.analyze_model_provider_dependency(
                                 parameter_extractor_entity.model.provider
                             ),
                         )
                     case NodeType.KNOWLEDGE_RETRIEVAL.value:
-                        knowledge_retrieval_entity = KnowledgeRetrievalNodeData(**node["data"])
+                        knowledge_retrieval_entity = KnowledgeRetrievalNodeData(
+                            **node["data"]
+                        )
                         if knowledge_retrieval_entity.retrieval_mode == "multiple":
                             if knowledge_retrieval_entity.multiple_retrieval_config:
                                 if (
@@ -643,16 +710,16 @@ class AppDslService:
                                     == "weighted_score"
                                 ):
                                     if knowledge_retrieval_entity.multiple_retrieval_config.weights:
-                                        vector_setting = (
-                                            knowledge_retrieval_entity.multiple_retrieval_config.weights.vector_setting
-                                        )
+                                        vector_setting = knowledge_retrieval_entity.multiple_retrieval_config.weights.vector_setting
                                         dependencies.append(
                                             DependenciesAnalysisService.analyze_model_provider_dependency(
                                                 vector_setting.embedding_provider_name
                                             ),
                                         )
                         elif knowledge_retrieval_entity.retrieval_mode == "single":
-                            model_config = knowledge_retrieval_entity.single_retrieval_config
+                            model_config = (
+                                knowledge_retrieval_entity.single_retrieval_config
+                            )
                             if model_config:
                                 dependencies.append(
                                     DependenciesAnalysisService.analyze_model_provider_dependency(
@@ -668,7 +735,9 @@ class AppDslService:
         return dependencies
 
     @classmethod
-    def _extract_dependencies_from_model_config(cls, model_config: Mapping) -> list[str]:
+    def _extract_dependencies_from_model_config(
+        cls, model_config: Mapping
+    ) -> list[str]:
         """
         Extract dependencies from model config
         :param model_config: model config dict
@@ -681,13 +750,17 @@ class AppDslService:
             model_dict = model_config.get("model", {})
             if model_dict:
                 dependencies.append(
-                    DependenciesAnalysisService.analyze_model_provider_dependency(model_dict.get("provider", ""))
+                    DependenciesAnalysisService.analyze_model_provider_dependency(
+                        model_dict.get("provider", "")
+                    )
                 )
 
             # reranking model
             dataset_configs = model_config.get("dataset_configs", {})
             if dataset_configs:
-                for dataset_config in dataset_configs.get("datasets", {}).get("datasets", []):
+                for dataset_config in dataset_configs.get("datasets", {}).get(
+                    "datasets", []
+                ):
                     if dataset_config.get("reranking_model"):
                         dependencies.append(
                             DependenciesAnalysisService.analyze_model_provider_dependency(
@@ -702,7 +775,9 @@ class AppDslService:
             if agent_configs:
                 for agent_config in agent_configs.get("tools", []):
                     dependencies.append(
-                        DependenciesAnalysisService.analyze_tool_dependency(agent_config.get("provider_id"))
+                        DependenciesAnalysisService.analyze_tool_dependency(
+                            agent_config.get("provider_id")
+                        )
                     )
 
         except Exception as e:
@@ -711,7 +786,9 @@ class AppDslService:
         return dependencies
 
     @classmethod
-    def get_leaked_dependencies(cls, tenant_id: str, dsl_dependencies: list[dict]) -> list[PluginDependency]:
+    def get_leaked_dependencies(
+        cls, tenant_id: str, dsl_dependencies: list[dict]
+    ) -> list[PluginDependency]:
         """
         Returns the leaked dependencies in current workspace
         """
@@ -719,4 +796,6 @@ class AppDslService:
         if not dependencies:
             return []
 
-        return DependenciesAnalysisService.get_leaked_dependencies(tenant_id=tenant_id, dependencies=dependencies)
+        return DependenciesAnalysisService.get_leaked_dependencies(
+            tenant_id=tenant_id, dependencies=dependencies
+        )

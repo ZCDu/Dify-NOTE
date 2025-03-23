@@ -167,7 +167,9 @@ def timezone(timezone_string):
     if timezone_string and timezone_string in available_timezones():
         return timezone_string
 
-    error = "{timezone_string} is not a valid timezone.".format(timezone_string=timezone_string)
+    error = "{timezone_string} is not a valid timezone.".format(
+        timezone_string=timezone_string
+    )
     raise ValueError(error)
 
 
@@ -194,15 +196,23 @@ def generate_text_hash(text: str) -> str:
     return sha256(hash_text.encode()).hexdigest()
 
 
-def compact_generate_response(response: Union[Mapping, Generator, RateLimitGenerator]) -> Response:
+def compact_generate_response(
+    response: Union[Mapping, Generator, RateLimitGenerator],
+) -> Response:
+    # NOTE: 响应内容渲染，可以发现这儿即使是流式也没有采用SSE，并且很明显的可以看出来，
+    # 没有使用pydantic
     if isinstance(response, dict):
-        return Response(response=json.dumps(response), status=200, mimetype="application/json")
+        return Response(
+            response=json.dumps(response), status=200, mimetype="application/json"
+        )
     else:
 
         def generate() -> Generator:
             yield from response
 
-        return Response(stream_with_context(generate()), status=200, mimetype="text/event-stream")
+        return Response(
+            stream_with_context(generate()), status=200, mimetype="text/event-stream"
+        )
 
 
 class TokenManager:
@@ -228,11 +238,17 @@ class TokenManager:
                 cls.revoke_token(old_token, token_type)
 
         token = str(uuid.uuid4())
-        token_data = {"account_id": account_id, "email": account_email, "token_type": token_type}
+        token_data = {
+            "account_id": account_id,
+            "email": account_email,
+            "token_type": token_type,
+        }
         if additional_data:
             token_data.update(additional_data)
 
-        expiry_minutes = dify_config.model_dump().get(f"{token_type.upper()}_TOKEN_EXPIRY_MINUTES")
+        expiry_minutes = dify_config.model_dump().get(
+            f"{token_type.upper()}_TOKEN_EXPIRY_MINUTES"
+        )
         if expiry_minutes is None:
             raise ValueError(f"Expiry minutes for {token_type} token is not set")
         token_key = cls._get_token_key(token, token_type)
@@ -240,7 +256,9 @@ class TokenManager:
         redis_client.setex(token_key, expiry_time, json.dumps(token_data))
 
         if account_id:
-            cls._set_current_token_for_account(account_id, token, token_type, expiry_minutes)
+            cls._set_current_token_for_account(
+                account_id, token, token_type, expiry_minutes
+            )
 
         return token
 
@@ -264,14 +282,20 @@ class TokenManager:
         return token_data
 
     @classmethod
-    def _get_current_token_for_account(cls, account_id: str, token_type: str) -> Optional[str]:
+    def _get_current_token_for_account(
+        cls, account_id: str, token_type: str
+    ) -> Optional[str]:
         key = cls._get_account_token_key(account_id, token_type)
         current_token: Optional[str] = redis_client.get(key)
         return current_token
 
     @classmethod
     def _set_current_token_for_account(
-        cls, account_id: str, token: str, token_type: str, expiry_hours: Union[int, float]
+        cls,
+        account_id: str,
+        token: str,
+        token_type: str,
+        expiry_hours: Union[int, float],
     ):
         key = cls._get_account_token_key(account_id, token_type)
         expiry_time = int(expiry_hours * 60 * 60)

@@ -35,6 +35,7 @@ from services.errors.llm import InvokeRateLimitError
 # define completion api for user
 class CompletionApi(WebApiResource):
     def post(self, app_model, end_user):
+        # NOTE: 限制了该模式的类型需要为completion
         if app_model.mode != "completion":
             raise NotCompletionAppError()
 
@@ -42,19 +43,38 @@ class CompletionApi(WebApiResource):
         parser.add_argument("inputs", type=dict, required=True, location="json")
         parser.add_argument("query", type=str, location="json", default="")
         parser.add_argument("files", type=list, required=False, location="json")
-        parser.add_argument("response_mode", type=str, choices=["blocking", "streaming"], location="json")
-        parser.add_argument("retriever_from", type=str, required=False, default="web_app", location="json")
+        parser.add_argument(
+            "response_mode",
+            type=str,
+            choices=["blocking", "streaming"],
+            location="json",
+        )
+        parser.add_argument(
+            "retriever_from",
+            type=str,
+            required=False,
+            default="web_app",
+            location="json",
+        )
 
+        # NOTE: 请求参数是明确的，但是这种方式明显不适合团队开发，还是用上pydantic更合适
         args = parser.parse_args()
 
+        # FIX: 这个默认流式是个什么鬼
         streaming = args["response_mode"] == "streaming"
         args["auto_generate_name"] = False
 
         try:
+            # NOTE: 通过invoke_from 来指定模式，这里就区分了service_api还是web
             response = AppGenerateService.generate(
-                app_model=app_model, user=end_user, args=args, invoke_from=InvokeFrom.WEB_APP, streaming=streaming
+                app_model=app_model,
+                user=end_user,
+                args=args,
+                invoke_from=InvokeFrom.WEB_APP,
+                streaming=streaming,
             )
 
+            # NOTE: 封装输出为响应体格式, 并流式输出，但是没有使用SSE
             return helper.compact_generate_response(response)
         except services.errors.conversation.ConversationNotExistsError:
             raise NotFound("Conversation Not Exists.")
@@ -98,10 +118,23 @@ class ChatApi(WebApiResource):
         parser.add_argument("inputs", type=dict, required=True, location="json")
         parser.add_argument("query", type=str, required=True, location="json")
         parser.add_argument("files", type=list, required=False, location="json")
-        parser.add_argument("response_mode", type=str, choices=["blocking", "streaming"], location="json")
+        parser.add_argument(
+            "response_mode",
+            type=str,
+            choices=["blocking", "streaming"],
+            location="json",
+        )
         parser.add_argument("conversation_id", type=uuid_value, location="json")
-        parser.add_argument("parent_message_id", type=uuid_value, required=False, location="json")
-        parser.add_argument("retriever_from", type=str, required=False, default="web_app", location="json")
+        parser.add_argument(
+            "parent_message_id", type=uuid_value, required=False, location="json"
+        )
+        parser.add_argument(
+            "retriever_from",
+            type=str,
+            required=False,
+            default="web_app",
+            location="json",
+        )
 
         args = parser.parse_args()
 
@@ -110,7 +143,11 @@ class ChatApi(WebApiResource):
 
         try:
             response = AppGenerateService.generate(
-                app_model=app_model, user=end_user, args=args, invoke_from=InvokeFrom.WEB_APP, streaming=streaming
+                app_model=app_model,
+                user=end_user,
+                args=args,
+                invoke_from=InvokeFrom.WEB_APP,
+                streaming=streaming,
             )
 
             return helper.compact_generate_response(response)

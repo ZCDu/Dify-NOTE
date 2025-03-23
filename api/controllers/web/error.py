@@ -1,6 +1,7 @@
 from libs.exception import BaseHTTPException
 
 
+# NOTE: 定义了所有的错误码
 class AppUnavailableError(BaseHTTPException):
     error_code = "app_unavailable"
     description = "App unavailable, please check your app configurations."
@@ -9,7 +10,9 @@ class AppUnavailableError(BaseHTTPException):
 
 class NotCompletionAppError(BaseHTTPException):
     error_code = "not_completion_app"
-    description = "Please check if your Completion app mode matches the right API route."
+    description = (
+        "Please check if your Completion app mode matches the right API route."
+    )
     code = 400
 
 

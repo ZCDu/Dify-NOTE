@@ -10,6 +10,7 @@ from core.file import File
 from .types import SegmentType
 
 
+# NOTE: 从这儿看还是有pydantic的使用的
 class Segment(BaseModel):
     model_config = ConfigDict(frozen=True)
 

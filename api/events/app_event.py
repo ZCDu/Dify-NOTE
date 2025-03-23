@@ -1,3 +1,4 @@
+# NOTE: 这是一个好玩意，类似于队列的机制，允许任意数量的应用订阅事件
 from blinker import signal
 
 # sender: app

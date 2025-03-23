@@ -17,6 +17,7 @@ from services.errors.llm import InvokeRateLimitError
 from services.workflow_service import WorkflowService
 
 
+# NOTE: 如其名，所有执行了LLM的入口
 class AppGenerateService:
     @classmethod
     def generate(
@@ -45,7 +46,11 @@ class AppGenerateService:
                 return rate_limit.generate(
                     CompletionAppGenerator.convert_to_event_stream(
                         CompletionAppGenerator().generate(
-                            app_model=app_model, user=user, args=args, invoke_from=invoke_from, streaming=streaming
+                            app_model=app_model,
+                            user=user,
+                            args=args,
+                            invoke_from=invoke_from,
+                            streaming=streaming,
                         ),
                     ),
                     request_id=request_id,
@@ -54,7 +59,11 @@ class AppGenerateService:
                 return rate_limit.generate(
                     AgentChatAppGenerator.convert_to_event_stream(
                         AgentChatAppGenerator().generate(
-                            app_model=app_model, user=user, args=args, invoke_from=invoke_from, streaming=streaming
+                            app_model=app_model,
+                            user=user,
+                            args=args,
+                            invoke_from=invoke_from,
+                            streaming=streaming,
                         ),
                     ),
                     request_id,
@@ -63,7 +72,11 @@ class AppGenerateService:
                 return rate_limit.generate(
                     ChatAppGenerator.convert_to_event_stream(
                         ChatAppGenerator().generate(
-                            app_model=app_model, user=user, args=args, invoke_from=invoke_from, streaming=streaming
+                            app_model=app_model,
+                            user=user,
+                            args=args,
+                            invoke_from=invoke_from,
+                            streaming=streaming,
                         ),
                     ),
                     request_id=request_id,
@@ -119,38 +132,72 @@ class AppGenerateService:
         return max_active_requests
 
     @classmethod
-    def generate_single_iteration(cls, app_model: App, user: Account, node_id: str, args: Any, streaming: bool = True):
+    def generate_single_iteration(
+        cls,
+        app_model: App,
+        user: Account,
+        node_id: str,
+        args: Any,
+        streaming: bool = True,
+    ):
         if app_model.mode == AppMode.ADVANCED_CHAT.value:
             workflow = cls._get_workflow(app_model, InvokeFrom.DEBUGGER)
             return AdvancedChatAppGenerator.convert_to_event_stream(
                 AdvancedChatAppGenerator().single_iteration_generate(
-                    app_model=app_model, workflow=workflow, node_id=node_id, user=user, args=args, streaming=streaming
+                    app_model=app_model,
+                    workflow=workflow,
+                    node_id=node_id,
+                    user=user,
+                    args=args,
+                    streaming=streaming,
                 )
             )
         elif app_model.mode == AppMode.WORKFLOW.value:
             workflow = cls._get_workflow(app_model, InvokeFrom.DEBUGGER)
             return AdvancedChatAppGenerator.convert_to_event_stream(
                 WorkflowAppGenerator().single_iteration_generate(
-                    app_model=app_model, workflow=workflow, node_id=node_id, user=user, args=args, streaming=streaming
+                    app_model=app_model,
+                    workflow=workflow,
+                    node_id=node_id,
+                    user=user,
+                    args=args,
+                    streaming=streaming,
                 )
             )
         else:
             raise ValueError(f"Invalid app mode {app_model.mode}")
 
     @classmethod
-    def generate_single_loop(cls, app_model: App, user: Account, node_id: str, args: Any, streaming: bool = True):
+    def generate_single_loop(
+        cls,
+        app_model: App,
+        user: Account,
+        node_id: str,
+        args: Any,
+        streaming: bool = True,
+    ):
         if app_model.mode == AppMode.ADVANCED_CHAT.value:
             workflow = cls._get_workflow(app_model, InvokeFrom.DEBUGGER)
             return AdvancedChatAppGenerator.convert_to_event_stream(
                 AdvancedChatAppGenerator().single_loop_generate(
-                    app_model=app_model, workflow=workflow, node_id=node_id, user=user, args=args, streaming=streaming
+                    app_model=app_model,
+                    workflow=workflow,
+                    node_id=node_id,
+                    user=user,
+                    args=args,
+                    streaming=streaming,
                 )
             )
         elif app_model.mode == AppMode.WORKFLOW.value:
             workflow = cls._get_workflow(app_model, InvokeFrom.DEBUGGER)
             return AdvancedChatAppGenerator.convert_to_event_stream(
                 WorkflowAppGenerator().single_loop_generate(
-                    app_model=app_model, workflow=workflow, node_id=node_id, user=user, args=args, streaming=streaming
+                    app_model=app_model,
+                    workflow=workflow,
+                    node_id=node_id,
+                    user=user,
+                    args=args,
+                    streaming=streaming,
                 )
             )
         else:
@@ -175,7 +222,11 @@ class AppGenerateService:
         :return:
         """
         return CompletionAppGenerator().generate_more_like_this(
-            app_model=app_model, message_id=message_id, user=user, invoke_from=invoke_from, stream=streaming
+            app_model=app_model,
+            message_id=message_id,
+            user=user,
+            invoke_from=invoke_from,
+            stream=streaming,
         )
 
     @classmethod

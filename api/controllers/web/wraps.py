@@ -36,13 +36,17 @@ def decode_jwt_token():
             raise Unauthorized("Authorization header is missing.")
 
         if " " not in auth_header:
-            raise Unauthorized("Invalid Authorization header format. Expected 'Bearer <api-key>' format.")
+            raise Unauthorized(
+                "Invalid Authorization header format. Expected 'Bearer <api-key>' format."
+            )
 
         auth_scheme, tk = auth_header.split(None, 1)
         auth_scheme = auth_scheme.lower()
 
         if auth_scheme != "bearer":
-            raise Unauthorized("Invalid Authorization header format. Expected 'Bearer <api-key>' format.")
+            raise Unauthorized(
+                "Invalid Authorization header format. Expected 'Bearer <api-key>' format."
+            )
         decoded = PassportService().verify(tk)
         app_code = decoded.get("app_code")
         app_model = db.session.query(App).filter(App.id == decoded["app_id"]).first()
@@ -53,7 +57,11 @@ def decode_jwt_token():
             raise BadRequest("Site URL is no longer valid.")
         if app_model.enable_site is False:
             raise BadRequest("Site is disabled.")
-        end_user = db.session.query(EndUser).filter(EndUser.id == decoded["end_user_id"]).first()
+        end_user = (
+            db.session.query(EndUser)
+            .filter(EndUser.id == decoded["end_user_id"])
+            .first()
+        )
         if not end_user:
             raise NotFound()
 
@@ -62,7 +70,9 @@ def decode_jwt_token():
         return app_model, end_user
     except Unauthorized as e:
         if system_features.sso_enforced_for_web:
-            app_web_sso_enabled = EnterpriseService.get_app_web_sso_enabled(app_code).get("enabled", False)
+            app_web_sso_enabled = EnterpriseService.get_app_web_sso_enabled(
+                app_code
+            ).get("enabled", False)
             if app_web_sso_enabled:
                 raise WebSSOAuthRequiredError()
 
@@ -74,7 +84,9 @@ def _validate_web_sso_token(decoded, system_features, app_code):
 
     # Check if SSO is enforced for web, and if the token source is not SSO, raise an error and redirect to SSO login
     if system_features.sso_enforced_for_web:
-        app_web_sso_enabled = EnterpriseService.get_app_web_sso_enabled(app_code).get("enabled", False)
+        app_web_sso_enabled = EnterpriseService.get_app_web_sso_enabled(app_code).get(
+            "enabled", False
+        )
         if app_web_sso_enabled:
             source = decoded.get("token_source")
             if not source or source != "sso":
@@ -88,5 +100,6 @@ def _validate_web_sso_token(decoded, system_features, app_code):
             raise Unauthorized("sso token expired.")
 
 
+# NOTE: 本质上也是Resource，只是多了一个validate_jwt_token的修饰
 class WebApiResource(Resource):
     method_decorators = [validate_jwt_token]

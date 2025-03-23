@@ -32,11 +32,14 @@ def create_app() -> DifyApp:
     initialize_extensions(app)
     end_time = time.perf_counter()
     if dify_config.DEBUG:
-        logging.info(f"Finished create_app ({round((end_time - start_time) * 1000, 2)} ms)")
+        logging.info(
+            f"Finished create_app ({round((end_time - start_time) * 1000, 2)} ms)"
+        )
     return app
 
 
 def initialize_extensions(app: DifyApp):
+    # NOTE: extensions文件夹里包含了一系列的扩展功能，包含了日志和登入控制等, 还有celery
     from extensions import (
         ext_app_metrics,
         ext_blueprints,
@@ -82,6 +85,7 @@ def initialize_extensions(app: DifyApp):
         ext_blueprints,
         ext_commands,
     ]
+    # NOTE:插件还能配置是否启动
     for ext in extensions:
         short_name = ext.__name__.split(".")[-1]
         is_enabled = ext.is_enabled() if hasattr(ext, "is_enabled") else True
@@ -94,7 +98,9 @@ def initialize_extensions(app: DifyApp):
         ext.init_app(app)
         end_time = time.perf_counter()
         if dify_config.DEBUG:
-            logging.info(f"Loaded {short_name} ({round((end_time - start_time) * 1000, 2)} ms)")
+            logging.info(
+                f"Loaded {short_name} ({round((end_time - start_time) * 1000, 2)} ms)"
+            )
 
 
 def create_migrations_app():

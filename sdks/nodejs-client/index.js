@@ -1,6 +1,7 @@
 import axios from "axios";
 export const BASE_URL = "https://api.dify.ai/v1";
 
+# NOTE: js的路由写法好简单啊
 export const routes = {
   //  app's
   feedback: {

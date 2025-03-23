@@ -4,10 +4,13 @@ import requests
 
 
 class DifyClient:
+    # NOTE: 这里的客户端配置本质上就是dify的页面入口配置
     def __init__(self, api_key, base_url: str = "https://api.dify.ai/v1"):
         self.api_key = api_key
         self.base_url = base_url
 
+    # NOTE: 啊？本质上这里还是request的转发，只是这里给加了一层请求头而已
+    # 从这儿也可以看出来，dify并不支持异步
     def _send_request(self, method, endpoint, json=None, params=None, stream=False):
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -55,6 +58,7 @@ class DifyClient:
 
 
 class CompletionClient(DifyClient):
+    # NOTE: 这个模式相较与ChatClient data少了一个query
     def create_completion_message(self, inputs, response_mode, user, files=None):
         data = {
             "inputs": inputs,
@@ -62,6 +66,7 @@ class CompletionClient(DifyClient):
             "user": user,
             "files": files,
         }
+        # NOTE: 发送到completion-messages就完事了
         return self._send_request(
             "POST",
             "/completion-messages",
@@ -70,6 +75,7 @@ class CompletionClient(DifyClient):
         )
 
 
+# NOTE: 这儿才是dify的入口, dify的两种flow的入口都是在这儿定义的
 class ChatClient(DifyClient):
     def create_chat_message(
         self,
@@ -87,6 +93,7 @@ class ChatClient(DifyClient):
             "response_mode": response_mode,
             "files": files,
         }
+        # NOTE: 就是说对话服务器是使用conversation_id进行会话区分的
         if conversation_id:
             data["conversation_id"] = conversation_id
 
@@ -97,12 +104,14 @@ class ChatClient(DifyClient):
             stream=True if response_mode == "streaming" else False,
         )
 
+    # NOTE: 获取推荐文
     def get_suggested(self, message_id, user: str):
         params = {"user": user}
         return self._send_request(
             "GET", f"/messages/{message_id}/suggested", params=params
         )
 
+    # FIX: 这个任务停止的玩意是个啥，还能主动触发中止操作呀?
     def stop_message(self, task_id, user):
         data = {"user": user}
         return self._send_request("POST", f"/chat-messages/{task_id}/stop", data)
@@ -111,6 +120,7 @@ class ChatClient(DifyClient):
         params = {"user": user, "last_id": last_id, "limit": limit, "pinned": pinned}
         return self._send_request("GET", "/conversations", params=params)
 
+    # FIX: 获取对话和获取对话信息有个啥差异啊
     def get_conversation_messages(
         self, user, conversation_id=None, first_id=None, limit=None
     ):
@@ -144,6 +154,7 @@ class ChatClient(DifyClient):
 
 
 class WorkflowClient(DifyClient):
+    # NOTE: 可以发现，workflow的客户端入口的请求体更加简单了，只有3个内容
     def run(
         self, inputs: dict, response_mode: str = "streaming", user: str = "abc-123"
     ):
@@ -154,10 +165,12 @@ class WorkflowClient(DifyClient):
         data = {"user": user}
         return self._send_request("POST", f"/workflows/tasks/{task_id}/stop", data)
 
+    # FIX: 诶? workflow具备一个获取结果的id，那是不是说明dify用了队列
     def get_result(self, workflow_run_id):
         return self._send_request("GET", f"/workflows/run/{workflow_run_id}")
 
 
+# NOTE: 好好好，还有一个知识库的客户端
 class KnowledgeBaseClient(DifyClient):
     def __init__(
         self,

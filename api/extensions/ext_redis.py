@@ -54,18 +54,24 @@ def init_app(app: DifyApp):
 
     redis_params: dict[str, Any] = {
         "username": dify_config.REDIS_USERNAME,
-        "password": dify_config.REDIS_PASSWORD or None,  # Temporary fix for empty password
+        "password": dify_config.REDIS_PASSWORD
+        or None,  # Temporary fix for empty password
         "db": dify_config.REDIS_DB,
         "encoding": "utf-8",
         "encoding_errors": "strict",
         "decode_responses": False,
     }
 
+    # NOTE: 支持redis集群，哨兵模式
     if dify_config.REDIS_USE_SENTINEL:
-        assert dify_config.REDIS_SENTINELS is not None, "REDIS_SENTINELS must be set when REDIS_USE_SENTINEL is True"
+        assert (
+            dify_config.REDIS_SENTINELS is not None
+        ), "REDIS_SENTINELS must be set when REDIS_USE_SENTINEL is True"
         sentinel_hosts = [
-            (node.split(":")[0], int(node.split(":")[1])) for node in dify_config.REDIS_SENTINELS.split(",")
+            (node.split(":")[0], int(node.split(":")[1]))
+            for node in dify_config.REDIS_SENTINELS.split(",")
         ]
+        # NOTE: 设置了redis的哨兵
         sentinel = Sentinel(
             sentinel_hosts,
             sentinel_kwargs={
@@ -74,16 +80,26 @@ def init_app(app: DifyApp):
                 "password": dify_config.REDIS_SENTINEL_PASSWORD,
             },
         )
-        master = sentinel.master_for(dify_config.REDIS_SENTINEL_SERVICE_NAME, **redis_params)
+        # NOTE: 设置redis哨兵的主节点
+        master = sentinel.master_for(
+            dify_config.REDIS_SENTINEL_SERVICE_NAME, **redis_params
+        )
         redis_client.initialize(master)
     elif dify_config.REDIS_USE_CLUSTERS:
-        assert dify_config.REDIS_CLUSTERS is not None, "REDIS_CLUSTERS must be set when REDIS_USE_CLUSTERS is True"
+        assert (
+            dify_config.REDIS_CLUSTERS is not None
+        ), "REDIS_CLUSTERS must be set when REDIS_USE_CLUSTERS is True"
         nodes = [
             ClusterNode(host=node.split(":")[0], port=int(node.split(":")[1]))
             for node in dify_config.REDIS_CLUSTERS.split(",")
         ]
         # FIXME: mypy error here, try to figure out how to fix it
-        redis_client.initialize(RedisCluster(startup_nodes=nodes, password=dify_config.REDIS_CLUSTERS_PASSWORD))  # type: ignore
+        redis_client.initialize(
+            RedisCluster(
+                startup_nodes=nodes, password=dify_config.REDIS_CLUSTERS_PASSWORD
+            )
+        )  # type: ignore
+    # NOTE: 也可以直接使用redis集群，而不使用哨兵模式
     else:
         redis_params.update(
             {

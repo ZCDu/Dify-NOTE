@@ -16,7 +16,9 @@ class RateLimit:
     _ACTIVE_REQUESTS_KEY = "dify:rate_limit:{}:active_requests"
     _UNLIMITED_REQUEST_ID = "unlimited_request_id"
     _REQUEST_MAX_ALIVE_TIME = 10 * 60  # 10 minutes
-    _ACTIVE_REQUESTS_COUNT_FLUSH_INTERVAL = 5 * 60  # recalculate request_count from request_detail every 5 minutes
+    _ACTIVE_REQUESTS_COUNT_FLUSH_INTERVAL = (
+        5 * 60
+    )  # recalculate request_count from request_detail every 5 minutes
     _instance_dict: dict[str, "RateLimit"] = {}
 
     def __new__(cls: type["RateLimit"], client_id: str, max_active_requests: int):
@@ -40,13 +42,17 @@ class RateLimit:
         self.last_recalculate_time = time.time()
         # flush max active requests
         if use_local_value or not redis_client.exists(self.max_active_requests_key):
+            # NOTE: redis pipeline支持通过TCP发送多个命令，将处理结果缓存等所有命令执行完成之后一起返回，
+            # 但是当一次执行的pipeline命令过多时，容易撑爆缓存区
             with redis_client.pipeline() as pipe:
                 pipe.set(self.max_active_requests_key, self.max_active_requests)
                 pipe.expire(self.max_active_requests_key, timedelta(days=1))
                 pipe.execute()
         else:
             with redis_client.pipeline() as pipe:
-                self.max_active_requests = int(redis_client.get(self.max_active_requests_key).decode("utf-8"))
+                self.max_active_requests = int(
+                    redis_client.get(self.max_active_requests_key).decode("utf-8")
+                )
                 redis_client.expire(self.max_active_requests_key, timedelta(days=1))
 
         # flush max active requests (in-transit request list)
@@ -57,25 +63,31 @@ class RateLimit:
         timeout_requests = [
             k
             for k, v in request_details.items()
-            if time.time() - float(v.decode("utf-8")) > RateLimit._REQUEST_MAX_ALIVE_TIME
+            if time.time() - float(v.decode("utf-8"))
+            > RateLimit._REQUEST_MAX_ALIVE_TIME
         ]
         if timeout_requests:
             redis_client.hdel(self.active_requests_key, *timeout_requests)
 
     def enter(self, request_id: Optional[str] = None) -> str:
-        if time.time() - self.last_recalculate_time > RateLimit._ACTIVE_REQUESTS_COUNT_FLUSH_INTERVAL:
+        if (
+            time.time() - self.last_recalculate_time
+            > RateLimit._ACTIVE_REQUESTS_COUNT_FLUSH_INTERVAL
+        ):
             self.flush_cache()
         if self.max_active_requests <= 0:
             return RateLimit._UNLIMITED_REQUEST_ID
         if not request_id:
             request_id = RateLimit.gen_request_key()
 
+        # NOTE: redis hset等h打头的方法都是针对哈希表的操作
         active_requests_count = redis_client.hlen(self.active_requests_key)
         if active_requests_count >= self.max_active_requests:
             raise AppInvokeQuotaExceededError(
                 "Too many requests. Please try again later. The current maximum "
                 "concurrent requests allowed is {}.".format(self.max_active_requests)
             )
+        # NOTE: 为当前的请求注册到redis里缓存
         redis_client.hset(self.active_requests_key, request_id, str(time.time()))
         return request_id
 
@@ -88,15 +100,26 @@ class RateLimit:
     def gen_request_key() -> str:
         return str(uuid.uuid4())
 
-    def generate(self, generator: Union[Generator[str, None, None], Mapping[str, Any]], request_id: str):
+    def generate(
+        self,
+        generator: Union[Generator[str, None, None], Mapping[str, Any]],
+        request_id: str,
+    ):
         if isinstance(generator, Mapping):
             return generator
         else:
-            return RateLimitGenerator(rate_limit=self, generator=generator, request_id=request_id)
+            return RateLimitGenerator(
+                rate_limit=self, generator=generator, request_id=request_id
+            )
 
 
 class RateLimitGenerator:
-    def __init__(self, rate_limit: RateLimit, generator: Generator[str, None, None], request_id: str):
+    def __init__(
+        self,
+        rate_limit: RateLimit,
+        generator: Generator[str, None, None],
+        request_id: str,
+    ):
         self.rate_limit = rate_limit
         self.generator = generator
         self.request_id = request_id

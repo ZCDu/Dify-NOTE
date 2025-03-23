@@ -61,7 +61,9 @@ class WorkflowType(Enum):
         """
         from models.model import AppMode
 
-        app_mode = app_mode if isinstance(app_mode, AppMode) else AppMode.value_of(app_mode)
+        app_mode = (
+            app_mode if isinstance(app_mode, AppMode) else AppMode.value_of(app_mode)
+        )
         return cls.WORKFLOW if app_mode == AppMode.WORKFLOW else cls.CHAT
 
 
@@ -85,6 +87,7 @@ class Workflow(Base):
         `draft` for draft version (only one for each app), other for version number (redundant)
 
     - graph (text) Workflow canvas configuration (JSON)
+      # 啊？这儿说图是使用json来配置的
 
         The entire canvas configuration JSON, including Node, Edge, and other configurations
 
@@ -104,7 +107,9 @@ class Workflow(Base):
         db.Index("workflow_version_idx", "tenant_id", "app_id", "version"),
     )
 
-    id: Mapped[str] = mapped_column(StringUUID, server_default=db.text("uuid_generate_v4()"))
+    id: Mapped[str] = mapped_column(
+        StringUUID, server_default=db.text("uuid_generate_v4()")
+    )
     tenant_id: Mapped[str] = mapped_column(StringUUID, nullable=False)
     app_id: Mapped[str] = mapped_column(StringUUID, nullable=False)
     type: Mapped[str] = mapped_column(db.String(255), nullable=False)
@@ -112,7 +117,9 @@ class Workflow(Base):
     graph: Mapped[str] = mapped_column(sa.Text)
     _features: Mapped[str] = mapped_column("features", sa.TEXT)
     created_by: Mapped[str] = mapped_column(StringUUID, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+    created_at: Mapped[datetime] = mapped_column(
+        db.DateTime, nullable=False, server_default=func.current_timestamp()
+    )
     updated_by: Mapped[Optional[str]] = mapped_column(StringUUID)
     updated_at: Mapped[datetime] = mapped_column(
         db.DateTime,
@@ -173,14 +180,20 @@ class Workflow(Base):
         features = json.loads(self._features)
         if features.get("file_upload", {}).get("image", {}).get("enabled", False):
             image_enabled = True
-            image_number_limits = int(features["file_upload"]["image"].get("number_limits", 1))
+            image_number_limits = int(
+                features["file_upload"]["image"].get("number_limits", 1)
+            )
             image_transfer_methods = features["file_upload"]["image"].get(
                 "transfer_methods", ["remote_url", "local_file"]
             )
             features["file_upload"]["enabled"] = image_enabled
             features["file_upload"]["number_limits"] = image_number_limits
-            features["file_upload"]["allowed_file_upload_methods"] = image_transfer_methods
-            features["file_upload"]["allowed_file_types"] = features["file_upload"].get("allowed_file_types", ["image"])
+            features["file_upload"]["allowed_file_upload_methods"] = (
+                image_transfer_methods
+            )
+            features["file_upload"]["allowed_file_types"] = features["file_upload"].get(
+                "allowed_file_types", ["image"]
+            )
             features["file_upload"]["allowed_file_extensions"] = []
             del features["file_upload"]["image"]
             self._features = json.dumps(features)
@@ -203,7 +216,10 @@ class Workflow(Base):
         if "nodes" not in graph_dict:
             return []
 
-        start_node = next((node for node in graph_dict["nodes"] if node["data"]["type"] == "start"), None)
+        start_node = next(
+            (node for node in graph_dict["nodes"] if node["data"]["type"] == "start"),
+            None,
+        )
         if not start_node:
             return []
 
@@ -236,7 +252,10 @@ class Workflow(Base):
 
         return (
             db.session.query(WorkflowToolProvider)
-            .filter(WorkflowToolProvider.tenant_id == self.tenant_id, WorkflowToolProvider.app_id == self.app_id)
+            .filter(
+                WorkflowToolProvider.tenant_id == self.tenant_id,
+                WorkflowToolProvider.app_id == self.app_id,
+            )
             .count()
             > 0
         )
@@ -249,15 +268,24 @@ class Workflow(Base):
 
         tenant_id = contexts.tenant_id.get()
 
-        environment_variables_dict: dict[str, Any] = json.loads(self._environment_variables)
+        environment_variables_dict: dict[str, Any] = json.loads(
+            self._environment_variables
+        )
         results = [
-            variable_factory.build_environment_variable_from_mapping(v) for v in environment_variables_dict.values()
+            variable_factory.build_environment_variable_from_mapping(v)
+            for v in environment_variables_dict.values()
         ]
 
         # decrypt secret variables value
         def decrypt_func(var):
             if isinstance(var, SecretVariable):
-                return var.model_copy(update={"value": encrypter.decrypt_token(tenant_id=tenant_id, token=var.value)})
+                return var.model_copy(
+                    update={
+                        "value": encrypter.decrypt_token(
+                            tenant_id=tenant_id, token=var.value
+                        )
+                    }
+                )
             else:
                 return var
 
@@ -278,15 +306,28 @@ class Workflow(Base):
 
         # Compare inputs and origin variables,
         # if the value is HIDDEN_VALUE, use the origin variable value (only update `name`).
-        origin_variables_dictionary = {var.id: var for var in self.environment_variables}
+        origin_variables_dictionary = {
+            var.id: var for var in self.environment_variables
+        }
         for i, variable in enumerate(value):
-            if variable.id in origin_variables_dictionary and variable.value == HIDDEN_VALUE:
-                value[i] = origin_variables_dictionary[variable.id].model_copy(update={"name": variable.name})
+            if (
+                variable.id in origin_variables_dictionary
+                and variable.value == HIDDEN_VALUE
+            ):
+                value[i] = origin_variables_dictionary[variable.id].model_copy(
+                    update={"name": variable.name}
+                )
 
         # encrypt secret variables value
         def encrypt_func(var):
             if isinstance(var, SecretVariable):
-                return var.model_copy(update={"value": encrypter.encrypt_token(tenant_id=tenant_id, token=var.value)})
+                return var.model_copy(
+                    update={
+                        "value": encrypter.encrypt_token(
+                            tenant_id=tenant_id, token=var.value
+                        )
+                    }
+                )
             else:
                 return var
 
@@ -300,15 +341,21 @@ class Workflow(Base):
     def to_dict(self, *, include_secret: bool = False) -> Mapping[str, Any]:
         environment_variables = list(self.environment_variables)
         environment_variables = [
-            v if not isinstance(v, SecretVariable) or include_secret else v.model_copy(update={"value": ""})
+            v
+            if not isinstance(v, SecretVariable) or include_secret
+            else v.model_copy(update={"value": ""})
             for v in environment_variables
         ]
 
         result = {
             "graph": self.graph_dict,
             "features": self.features_dict,
-            "environment_variables": [var.model_dump(mode="json") for var in environment_variables],
-            "conversation_variables": [var.model_dump(mode="json") for var in self.conversation_variables],
+            "environment_variables": [
+                var.model_dump(mode="json") for var in environment_variables
+            ],
+            "conversation_variables": [
+                var.model_dump(mode="json") for var in self.conversation_variables
+            ],
         }
         return result
 
@@ -319,7 +366,10 @@ class Workflow(Base):
             self._conversation_variables = "{}"
 
         variables_dict: dict[str, Any] = json.loads(self._conversation_variables)
-        results = [variable_factory.build_conversation_variable_from_mapping(v) for v in variables_dict.values()]
+        results = [
+            variable_factory.build_conversation_variable_from_mapping(v)
+            for v in variables_dict.values()
+        ]
         return results
 
     @conversation_variables.setter
@@ -396,11 +446,20 @@ class WorkflowRun(Base):
     __tablename__ = "workflow_runs"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="workflow_run_pkey"),
-        db.Index("workflow_run_triggerd_from_idx", "tenant_id", "app_id", "triggered_from"),
-        db.Index("workflow_run_tenant_app_sequence_idx", "tenant_id", "app_id", "sequence_number"),
+        db.Index(
+            "workflow_run_triggerd_from_idx", "tenant_id", "app_id", "triggered_from"
+        ),
+        db.Index(
+            "workflow_run_tenant_app_sequence_idx",
+            "tenant_id",
+            "app_id",
+            "sequence_number",
+        ),
     )
 
-    id: Mapped[str] = mapped_column(StringUUID, server_default=db.text("uuid_generate_v4()"))
+    id: Mapped[str] = mapped_column(
+        StringUUID, server_default=db.text("uuid_generate_v4()")
+    )
     tenant_id: Mapped[str] = mapped_column(StringUUID)
     app_id: Mapped[str] = mapped_column(StringUUID)
     sequence_number: Mapped[int] = mapped_column()
@@ -410,29 +469,43 @@ class WorkflowRun(Base):
     version: Mapped[str] = mapped_column(db.String(255))
     graph: Mapped[Optional[str]] = mapped_column(db.Text)
     inputs: Mapped[Optional[str]] = mapped_column(db.Text)
-    status: Mapped[str] = mapped_column(db.String(255))  # running, succeeded, failed, stopped, partial-succeeded
+    status: Mapped[str] = mapped_column(
+        db.String(255)
+    )  # running, succeeded, failed, stopped, partial-succeeded
     outputs: Mapped[Optional[str]] = mapped_column(sa.Text, default="{}")
     error: Mapped[Optional[str]] = mapped_column(db.Text)
     elapsed_time = db.Column(db.Float, nullable=False, server_default=sa.text("0"))
-    total_tokens: Mapped[int] = mapped_column(sa.BigInteger, server_default=sa.text("0"))
+    total_tokens: Mapped[int] = mapped_column(
+        sa.BigInteger, server_default=sa.text("0")
+    )
     total_steps = db.Column(db.Integer, server_default=db.text("0"))
     created_by_role: Mapped[str] = mapped_column(db.String(255))  # account, end_user
     created_by = db.Column(StringUUID, nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+    created_at = db.Column(
+        db.DateTime, nullable=False, server_default=func.current_timestamp()
+    )
     finished_at = db.Column(db.DateTime)
     exceptions_count = db.Column(db.Integer, server_default=db.text("0"))
 
     @property
     def created_by_account(self):
         created_by_role = CreatedByRole(self.created_by_role)
-        return db.session.get(Account, self.created_by) if created_by_role == CreatedByRole.ACCOUNT else None
+        return (
+            db.session.get(Account, self.created_by)
+            if created_by_role == CreatedByRole.ACCOUNT
+            else None
+        )
 
     @property
     def created_by_end_user(self):
         from models.model import EndUser
 
         created_by_role = CreatedByRole(self.created_by_role)
-        return db.session.get(EndUser, self.created_by) if created_by_role == CreatedByRole.END_USER else None
+        return (
+            db.session.get(EndUser, self.created_by)
+            if created_by_role == CreatedByRole.END_USER
+            else None
+        )
 
     @property
     def graph_dict(self):
@@ -451,12 +524,16 @@ class WorkflowRun(Base):
         from models.model import Message
 
         return (
-            db.session.query(Message).filter(Message.app_id == self.app_id, Message.workflow_run_id == self.id).first()
+            db.session.query(Message)
+            .filter(Message.app_id == self.app_id, Message.workflow_run_id == self.id)
+            .first()
         )
 
     @property
     def workflow(self):
-        return db.session.query(Workflow).filter(Workflow.id == self.workflow_id).first()
+        return (
+            db.session.query(Workflow).filter(Workflow.id == self.workflow_id).first()
+        )
 
     def to_dict(self):
         return {
@@ -529,7 +606,9 @@ class WorkflowNodeExecutionTriggeredFrom(Enum):
         for mode in cls:
             if mode.value == value:
                 return mode
-        raise ValueError(f"invalid workflow node execution triggered from value {value}")
+        raise ValueError(
+            f"invalid workflow node execution triggered from value {value}"
+        )
 
 
 class WorkflowNodeExecutionStatus(Enum):
@@ -617,7 +696,12 @@ class WorkflowNodeExecution(Base):
             "workflow_run_id",
         ),
         db.Index(
-            "workflow_node_execution_node_run_idx", "tenant_id", "app_id", "workflow_id", "triggered_from", "node_id"
+            "workflow_node_execution_node_run_idx",
+            "tenant_id",
+            "app_id",
+            "workflow_id",
+            "triggered_from",
+            "node_id",
         ),
         db.Index(
             "workflow_node_execution_id_idx",
@@ -629,7 +713,9 @@ class WorkflowNodeExecution(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(StringUUID, server_default=db.text("uuid_generate_v4()"))
+    id: Mapped[str] = mapped_column(
+        StringUUID, server_default=db.text("uuid_generate_v4()")
+    )
     tenant_id: Mapped[str] = mapped_column(StringUUID)
     app_id: Mapped[str] = mapped_column(StringUUID)
     workflow_id: Mapped[str] = mapped_column(StringUUID)
@@ -648,7 +734,9 @@ class WorkflowNodeExecution(Base):
     error: Mapped[Optional[str]] = mapped_column(db.Text)
     elapsed_time: Mapped[float] = mapped_column(db.Float, server_default=db.text("0"))
     execution_metadata: Mapped[Optional[str]] = mapped_column(db.Text)
-    created_at: Mapped[datetime] = mapped_column(db.DateTime, server_default=func.current_timestamp())
+    created_at: Mapped[datetime] = mapped_column(
+        db.DateTime, server_default=func.current_timestamp()
+    )
     created_by_role: Mapped[str] = mapped_column(db.String(255))
     created_by: Mapped[str] = mapped_column(StringUUID)
     finished_at: Mapped[Optional[datetime]] = mapped_column(db.DateTime)
@@ -656,14 +744,22 @@ class WorkflowNodeExecution(Base):
     @property
     def created_by_account(self):
         created_by_role = CreatedByRole(self.created_by_role)
-        return db.session.get(Account, self.created_by) if created_by_role == CreatedByRole.ACCOUNT else None
+        return (
+            db.session.get(Account, self.created_by)
+            if created_by_role == CreatedByRole.ACCOUNT
+            else None
+        )
 
     @property
     def created_by_end_user(self):
         from models.model import EndUser
 
         created_by_role = CreatedByRole(self.created_by_role)
-        return db.session.get(EndUser, self.created_by) if created_by_role == CreatedByRole.END_USER else None
+        return (
+            db.session.get(EndUser, self.created_by)
+            if created_by_role == CreatedByRole.END_USER
+            else None
+        )
 
     @property
     def inputs_dict(self):
@@ -689,7 +785,10 @@ class WorkflowNodeExecution(Base):
         if self.execution_metadata_dict:
             from core.workflow.nodes import NodeType
 
-            if self.node_type == NodeType.TOOL.value and "tool_info" in self.execution_metadata_dict:
+            if (
+                self.node_type == NodeType.TOOL.value
+                and "tool_info" in self.execution_metadata_dict
+            ):
                 tool_info = self.execution_metadata_dict["tool_info"]
                 extras["icon"] = ToolManager.get_tool_icon(
                     tenant_id=self.tenant_id,
@@ -758,7 +857,9 @@ class WorkflowAppLog(Base):
         db.Index("workflow_app_log_app_idx", "tenant_id", "app_id"),
     )
 
-    id: Mapped[str] = mapped_column(StringUUID, server_default=db.text("uuid_generate_v4()"))
+    id: Mapped[str] = mapped_column(
+        StringUUID, server_default=db.text("uuid_generate_v4()")
+    )
     tenant_id: Mapped[str] = mapped_column(StringUUID)
     app_id: Mapped[str] = mapped_column(StringUUID)
     workflow_id = db.Column(StringUUID, nullable=False)
@@ -766,7 +867,9 @@ class WorkflowAppLog(Base):
     created_from = db.Column(db.String(255), nullable=False)
     created_by_role = db.Column(db.String(255), nullable=False)
     created_by = db.Column(StringUUID, nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+    created_at = db.Column(
+        db.DateTime, nullable=False, server_default=func.current_timestamp()
+    )
 
     @property
     def workflow_run(self):
@@ -775,41 +878,62 @@ class WorkflowAppLog(Base):
     @property
     def created_by_account(self):
         created_by_role = CreatedByRole(self.created_by_role)
-        return db.session.get(Account, self.created_by) if created_by_role == CreatedByRole.ACCOUNT else None
+        return (
+            db.session.get(Account, self.created_by)
+            if created_by_role == CreatedByRole.ACCOUNT
+            else None
+        )
 
     @property
     def created_by_end_user(self):
         from models.model import EndUser
 
         created_by_role = CreatedByRole(self.created_by_role)
-        return db.session.get(EndUser, self.created_by) if created_by_role == CreatedByRole.END_USER else None
+        return (
+            db.session.get(EndUser, self.created_by)
+            if created_by_role == CreatedByRole.END_USER
+            else None
+        )
 
 
 class ConversationVariable(Base):
     __tablename__ = "workflow_conversation_variables"
     __table_args__ = (
-        PrimaryKeyConstraint("id", "conversation_id", name="workflow_conversation_variables_pkey"),
+        PrimaryKeyConstraint(
+            "id", "conversation_id", name="workflow_conversation_variables_pkey"
+        ),
         Index("workflow__conversation_variables_app_id_idx", "app_id"),
         Index("workflow__conversation_variables_created_at_idx", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(StringUUID, primary_key=True)
-    conversation_id: Mapped[str] = mapped_column(StringUUID, nullable=False, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        StringUUID, nullable=False, primary_key=True
+    )
     app_id: Mapped[str] = mapped_column(StringUUID, nullable=False)
     data = mapped_column(db.Text, nullable=False)
-    created_at = mapped_column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+    created_at = mapped_column(
+        db.DateTime, nullable=False, server_default=func.current_timestamp()
+    )
     updated_at = mapped_column(
-        db.DateTime, nullable=False, server_default=func.current_timestamp(), onupdate=func.current_timestamp()
+        db.DateTime,
+        nullable=False,
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
     )
 
-    def __init__(self, *, id: str, app_id: str, conversation_id: str, data: str) -> None:
+    def __init__(
+        self, *, id: str, app_id: str, conversation_id: str, data: str
+    ) -> None:
         self.id = id
         self.app_id = app_id
         self.conversation_id = conversation_id
         self.data = data
 
     @classmethod
-    def from_variable(cls, *, app_id: str, conversation_id: str, variable: Variable) -> "ConversationVariable":
+    def from_variable(
+        cls, *, app_id: str, conversation_id: str, variable: Variable
+    ) -> "ConversationVariable":
         obj = cls(
             id=variable.id,
             app_id=app_id,

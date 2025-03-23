@@ -10,6 +10,7 @@ from werkzeug.exceptions import HTTPException
 from core.errors.error import AppInvokeQuotaExceededError
 
 
+# NOTE: 对flask的请求头做了扩展
 class ExternalApi(Api):
     def handle_error(self, e):
         """Error handler for the API transforms a raised exception into a Flask
@@ -36,9 +37,12 @@ class ExternalApi(Api):
 
             if (
                 default_data["message"]
-                and default_data["message"] == "Failed to decode JSON object: Expecting value: line 1 column 1 (char 0)"
+                and default_data["message"]
+                == "Failed to decode JSON object: Expecting value: line 1 column 1 (char 0)"
             ):
-                default_data["message"] = "Invalid JSON payload received or JSON payload is empty."
+                default_data["message"] = (
+                    "Invalid JSON payload received or JSON payload is empty."
+                )
 
             headers = e.get_response().headers
         elif isinstance(e, ValueError):
@@ -95,14 +99,24 @@ class ExternalApi(Api):
             # make_response uses a representation we support as the
             # default mediatype (so that make_response doesn't throw
             # another NotAcceptable error).
-            supported_mediatypes = list(self.representations.keys())  # only supported application/json
-            fallback_mediatype = supported_mediatypes[0] if supported_mediatypes else "text/plain"
+            supported_mediatypes = list(
+                self.representations.keys()
+            )  # only supported application/json
+            fallback_mediatype = (
+                supported_mediatypes[0] if supported_mediatypes else "text/plain"
+            )
             data = {"code": "not_acceptable", "message": data.get("message")}
-            resp = self.make_response(data, status_code, headers, fallback_mediatype=fallback_mediatype)
+            resp = self.make_response(
+                data, status_code, headers, fallback_mediatype=fallback_mediatype
+            )
         elif status_code == 400:
             if isinstance(data.get("message"), dict):
                 param_key, param_value = list(data.get("message", {}).items())[0]
-                data = {"code": "invalid_param", "message": param_value, "params": param_key}
+                data = {
+                    "code": "invalid_param",
+                    "message": param_value,
+                    "params": param_key,
+                }
             else:
                 if "code" not in data:
                     data["code"] = "unknown"

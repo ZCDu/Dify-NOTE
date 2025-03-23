@@ -9,6 +9,8 @@ from models.model import App, AppMode
 from services.app_service import AppService
 
 
+# NOTE: 所以这个和app里的那个本质上是重复的代码，
+# 这儿的父类也是通过一个手段注入了一个修饰器
 class AppParameterApi(WebApiResource):
     """Resource for app variables."""
 

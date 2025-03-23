@@ -14,7 +14,11 @@ from controllers.service_api.app.error import (
     ProviderNotInitializeError,
     ProviderQuotaExceededError,
 )
-from controllers.service_api.wraps import FetchUserArg, WhereisUserArg, validate_app_token
+from controllers.service_api.wraps import (
+    FetchUserArg,
+    WhereisUserArg,
+    validate_app_token,
+)
 from core.app.apps.base_app_queue_manager import AppQueueManager
 from core.app.entities.app_invoke_entities import InvokeFrom
 from core.errors.error import (
@@ -30,17 +34,29 @@ from services.app_generate_service import AppGenerateService
 
 
 class CompletionApi(Resource):
-    @validate_app_token(fetch_user_arg=FetchUserArg(fetch_from=WhereisUserArg.JSON, required=True))
+    # NOTE: 当前使用的参数模式是json格式
+    @validate_app_token(
+        fetch_user_arg=FetchUserArg(fetch_from=WhereisUserArg.JSON, required=True)
+    )
     def post(self, app_model: App, end_user: EndUser):
         if app_model.mode != "completion":
             raise AppUnavailableError()
 
+        # NOTE: 可能就是为了兼容WhereisUserArg的请求体主体兼容，所以这里才采用了非pydantic的模式，
+        # 毕竟 WhereisUserArg采用的是BaseModel
         parser = reqparse.RequestParser()
         parser.add_argument("inputs", type=dict, required=True, location="json")
         parser.add_argument("query", type=str, location="json", default="")
         parser.add_argument("files", type=list, required=False, location="json")
-        parser.add_argument("response_mode", type=str, choices=["blocking", "streaming"], location="json")
-        parser.add_argument("retriever_from", type=str, required=False, default="dev", location="json")
+        parser.add_argument(
+            "response_mode",
+            type=str,
+            choices=["blocking", "streaming"],
+            location="json",
+        )
+        parser.add_argument(
+            "retriever_from", type=str, required=False, default="dev", location="json"
+        )
 
         args = parser.parse_args()
 
@@ -48,6 +64,7 @@ class CompletionApi(Resource):
 
         args["auto_generate_name"] = False
 
+        # NOTE: 这个错误处理也太长了吧
         try:
             response = AppGenerateService.generate(
                 app_model=app_model,
@@ -81,7 +98,9 @@ class CompletionApi(Resource):
 
 
 class CompletionStopApi(Resource):
-    @validate_app_token(fetch_user_arg=FetchUserArg(fetch_from=WhereisUserArg.JSON, required=True))
+    @validate_app_token(
+        fetch_user_arg=FetchUserArg(fetch_from=WhereisUserArg.JSON, required=True)
+    )
     def post(self, app_model: App, end_user: EndUser, task_id):
         if app_model.mode != "completion":
             raise AppUnavailableError()
@@ -92,7 +111,9 @@ class CompletionStopApi(Resource):
 
 
 class ChatApi(Resource):
-    @validate_app_token(fetch_user_arg=FetchUserArg(fetch_from=WhereisUserArg.JSON, required=True))
+    @validate_app_token(
+        fetch_user_arg=FetchUserArg(fetch_from=WhereisUserArg.JSON, required=True)
+    )
     def post(self, app_model: App, end_user: EndUser):
         app_mode = AppMode.value_of(app_model.mode)
         if app_mode not in {AppMode.CHAT, AppMode.AGENT_CHAT, AppMode.ADVANCED_CHAT}:
@@ -102,10 +123,23 @@ class ChatApi(Resource):
         parser.add_argument("inputs", type=dict, required=True, location="json")
         parser.add_argument("query", type=str, required=True, location="json")
         parser.add_argument("files", type=list, required=False, location="json")
-        parser.add_argument("response_mode", type=str, choices=["blocking", "streaming"], location="json")
+        parser.add_argument(
+            "response_mode",
+            type=str,
+            choices=["blocking", "streaming"],
+            location="json",
+        )
         parser.add_argument("conversation_id", type=uuid_value, location="json")
-        parser.add_argument("retriever_from", type=str, required=False, default="dev", location="json")
-        parser.add_argument("auto_generate_name", type=bool, required=False, default=True, location="json")
+        parser.add_argument(
+            "retriever_from", type=str, required=False, default="dev", location="json"
+        )
+        parser.add_argument(
+            "auto_generate_name",
+            type=bool,
+            required=False,
+            default=True,
+            location="json",
+        )
 
         args = parser.parse_args()
 
@@ -113,7 +147,11 @@ class ChatApi(Resource):
 
         try:
             response = AppGenerateService.generate(
-                app_model=app_model, user=end_user, args=args, invoke_from=InvokeFrom.SERVICE_API, streaming=streaming
+                app_model=app_model,
+                user=end_user,
+                args=args,
+                invoke_from=InvokeFrom.SERVICE_API,
+                streaming=streaming,
             )
 
             return helper.compact_generate_response(response)
@@ -140,7 +178,9 @@ class ChatApi(Resource):
 
 
 class ChatStopApi(Resource):
-    @validate_app_token(fetch_user_arg=FetchUserArg(fetch_from=WhereisUserArg.JSON, required=True))
+    @validate_app_token(
+        fetch_user_arg=FetchUserArg(fetch_from=WhereisUserArg.JSON, required=True)
+    )
     def post(self, app_model: App, end_user: EndUser, task_id):
         app_mode = AppMode.value_of(app_model.mode)
         if app_mode not in {AppMode.CHAT, AppMode.AGENT_CHAT, AppMode.ADVANCED_CHAT}:

@@ -12,6 +12,7 @@ class OAuthUserInfo:
     email: str
 
 
+# NOTE: 授权！这是我想要的玩意
 class OAuth:
     def __init__(self, client_id: str, client_secret: str, redirect_uri: str):
         self.client_id = client_id
@@ -77,7 +78,9 @@ class GitHubOAuth(OAuth):
 
         email_response = requests.get(self._EMAIL_INFO_URL, headers=headers)
         email_info = email_response.json()
-        primary_email: dict = next((email for email in email_info if email["primary"] == True), {})
+        primary_email: dict = next(
+            (email for email in email_info if email["primary"] == True), {}
+        )
 
         return {**user_info, "email": primary_email.get("email", "")}
 

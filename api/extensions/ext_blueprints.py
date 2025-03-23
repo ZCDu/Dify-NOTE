@@ -2,6 +2,7 @@ from configs import dify_config
 from dify_app import DifyApp
 
 
+# NOTE: 通过集成来实现插件的功能集成
 def init_app(app: DifyApp):
     # register blueprint routers
 
@@ -42,7 +43,11 @@ def init_app(app: DifyApp):
 
     app.register_blueprint(console_app_bp)
 
-    CORS(files_bp, allow_headers=["Content-Type"], methods=["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH"])
+    CORS(
+        files_bp,
+        allow_headers=["Content-Type"],
+        methods=["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH"],
+    )
     app.register_blueprint(files_bp)
 
     app.register_blueprint(inner_api_bp)
