@@ -21,7 +21,10 @@ from core.workflow.nodes.event import RunCompletedEvent
 from core.workflow.nodes.event.types import NodeEvent
 from core.workflow.nodes.node_mapping import LATEST_VERSION, NODE_TYPE_CLASSES_MAPPING
 from core.workflow.workflow_entry import WorkflowEntry
-from events.app_event import app_draft_workflow_was_synced, app_published_workflow_was_updated
+from events.app_event import (
+    app_draft_workflow_was_synced,
+    app_published_workflow_was_updated,
+)
 from extensions.ext_database import db
 from models.account import Account
 from models.enums import CreatedByRole
@@ -50,7 +53,9 @@ class WorkflowService:
         workflow = (
             db.session.query(Workflow)
             .filter(
-                Workflow.tenant_id == app_model.tenant_id, Workflow.app_id == app_model.id, Workflow.version == "draft"
+                Workflow.tenant_id == app_model.tenant_id,
+                Workflow.app_id == app_model.id,
+                Workflow.version == "draft",
             )
             .first()
         )
@@ -67,6 +72,7 @@ class WorkflowService:
             return None
 
         # fetch published workflow by workflow_id
+        # NOTE: 也就是说，只有publish版本会使用到workflow_id这个属性, 去mysql里过滤获取的数据
         workflow = (
             db.session.query(Workflow)
             .filter(
@@ -79,7 +85,9 @@ class WorkflowService:
 
         return workflow
 
-    def get_all_published_workflow(self, app_model: App, page: int, limit: int) -> tuple[list[Workflow], bool]:
+    def get_all_published_workflow(
+        self, app_model: App, page: int, limit: int
+    ) -> tuple[list[Workflow], bool]:
         """
         Get published workflow with pagination
         """
@@ -157,7 +165,12 @@ class WorkflowService:
         # return draft workflow
         return workflow
 
-    def publish_workflow(self, app_model: App, account: Account, draft_workflow: Optional[Workflow] = None) -> Workflow:
+    def publish_workflow(
+        self,
+        app_model: App,
+        account: Account,
+        draft_workflow: Optional[Workflow] = None,
+    ) -> Workflow:
         """
         Publish workflow from draft
 
@@ -213,7 +226,9 @@ class WorkflowService:
 
         return default_block_configs
 
-    def get_default_block_config(self, node_type: str, filters: Optional[dict] = None) -> Optional[dict]:
+    def get_default_block_config(
+        self, node_type: str, filters: Optional[dict] = None
+    ) -> Optional[dict]:
         """
         Get default config of node.
         :param node_type: node type
@@ -269,7 +284,12 @@ class WorkflowService:
         return workflow_node_execution
 
     def run_free_workflow_node(
-        self, node_data: dict, tenant_id: str, user_id: str, node_id: str, user_inputs: dict[str, Any]
+        self,
+        node_data: dict,
+        tenant_id: str,
+        user_id: str,
+        node_id: str,
+        user_inputs: dict[str, Any],
     ) -> WorkflowNodeExecution:
         """
         Run draft workflow node
@@ -294,7 +314,9 @@ class WorkflowService:
 
     def _handle_node_run_result(
         self,
-        getter: Callable[[], tuple[BaseNode, Generator[NodeEvent | InNodeEvent, None, None]]],
+        getter: Callable[
+            [], tuple[BaseNode, Generator[NodeEvent | InNodeEvent, None, None]]
+        ],
         start_at: float,
         tenant_id: str,
         node_id: str,
@@ -316,20 +338,30 @@ class WorkflowService:
                     node_run_result = event.run_result
 
                     # sign output files
-                    node_run_result.outputs = WorkflowEntry.handle_special_values(node_run_result.outputs)
+                    node_run_result.outputs = WorkflowEntry.handle_special_values(
+                        node_run_result.outputs
+                    )
                     break
 
             if not node_run_result:
                 raise ValueError("Node run failed with no run result")
             # single step debug mode error handling return
-            if node_run_result.status == WorkflowNodeExecutionStatus.FAILED and node_instance.should_continue_on_error:
+            if (
+                node_run_result.status == WorkflowNodeExecutionStatus.FAILED
+                and node_instance.should_continue_on_error
+            ):
                 node_error_args: dict[str, Any] = {
                     "status": WorkflowNodeExecutionStatus.EXCEPTION,
                     "error": node_run_result.error,
                     "inputs": node_run_result.inputs,
-                    "metadata": {"error_strategy": node_instance.node_data.error_strategy},
+                    "metadata": {
+                        "error_strategy": node_instance.node_data.error_strategy
+                    },
                 }
-                if node_instance.node_data.error_strategy is ErrorStrategy.DEFAULT_VALUE:
+                if (
+                    node_instance.node_data.error_strategy
+                    is ErrorStrategy.DEFAULT_VALUE
+                ):
                     node_run_result = NodeRunResult(
                         **node_error_args,
                         outputs={
@@ -360,7 +392,9 @@ class WorkflowService:
         workflow_node_execution = WorkflowNodeExecution()
         workflow_node_execution.id = str(uuid4())
         workflow_node_execution.tenant_id = tenant_id
-        workflow_node_execution.triggered_from = WorkflowNodeExecutionTriggeredFrom.SINGLE_STEP.value
+        workflow_node_execution.triggered_from = (
+            WorkflowNodeExecutionTriggeredFrom.SINGLE_STEP.value
+        )
         workflow_node_execution.index = 1
         workflow_node_execution.node_id = node_id
         workflow_node_execution.node_type = node_instance.node_type
@@ -371,24 +405,38 @@ class WorkflowService:
         workflow_node_execution.finished_at = datetime.now(UTC).replace(tzinfo=None)
         if run_succeeded and node_run_result:
             # create workflow node execution
-            inputs = WorkflowEntry.handle_special_values(node_run_result.inputs) if node_run_result.inputs else None
+            inputs = (
+                WorkflowEntry.handle_special_values(node_run_result.inputs)
+                if node_run_result.inputs
+                else None
+            )
             process_data = (
                 WorkflowEntry.handle_special_values(node_run_result.process_data)
                 if node_run_result.process_data
                 else None
             )
-            outputs = WorkflowEntry.handle_special_values(node_run_result.outputs) if node_run_result.outputs else None
+            outputs = (
+                WorkflowEntry.handle_special_values(node_run_result.outputs)
+                if node_run_result.outputs
+                else None
+            )
 
             workflow_node_execution.inputs = json.dumps(inputs)
             workflow_node_execution.process_data = json.dumps(process_data)
             workflow_node_execution.outputs = json.dumps(outputs)
             workflow_node_execution.execution_metadata = (
-                json.dumps(jsonable_encoder(node_run_result.metadata)) if node_run_result.metadata else None
+                json.dumps(jsonable_encoder(node_run_result.metadata))
+                if node_run_result.metadata
+                else None
             )
             if node_run_result.status == WorkflowNodeExecutionStatus.SUCCEEDED:
-                workflow_node_execution.status = WorkflowNodeExecutionStatus.SUCCEEDED.value
+                workflow_node_execution.status = (
+                    WorkflowNodeExecutionStatus.SUCCEEDED.value
+                )
             elif node_run_result.status == WorkflowNodeExecutionStatus.EXCEPTION:
-                workflow_node_execution.status = WorkflowNodeExecutionStatus.EXCEPTION.value
+                workflow_node_execution.status = (
+                    WorkflowNodeExecutionStatus.EXCEPTION.value
+                )
                 workflow_node_execution.error = node_run_result.error
         else:
             # create workflow node execution
@@ -411,7 +459,9 @@ class WorkflowService:
         workflow_converter = WorkflowConverter()
 
         if app_model.mode not in {AppMode.CHAT.value, AppMode.COMPLETION.value}:
-            raise ValueError(f"Current App mode: {app_model.mode} is not supported convert to workflow.")
+            raise ValueError(
+                f"Current App mode: {app_model.mode} is not supported convert to workflow."
+            )
 
         # convert to workflow
         new_app: App = workflow_converter.convert_to_workflow(
@@ -428,11 +478,15 @@ class WorkflowService:
     def validate_features_structure(self, app_model: App, features: dict) -> dict:
         if app_model.mode == AppMode.ADVANCED_CHAT.value:
             return AdvancedChatAppConfigManager.config_validate(
-                tenant_id=app_model.tenant_id, config=features, only_structure_validate=True
+                tenant_id=app_model.tenant_id,
+                config=features,
+                only_structure_validate=True,
             )
         elif app_model.mode == AppMode.WORKFLOW.value:
             return WorkflowAppConfigManager.config_validate(
-                tenant_id=app_model.tenant_id, config=features, only_structure_validate=True
+                tenant_id=app_model.tenant_id,
+                config=features,
+                only_structure_validate=True,
             )
         else:
             raise ValueError(f"Invalid app mode: {app_model.mode}")

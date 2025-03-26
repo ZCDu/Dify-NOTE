@@ -6,9 +6,15 @@ from typing import Optional, Union, cast
 
 from sqlalchemy import and_
 
-from core.app.app_config.entities import EasyUIBasedAppConfig, EasyUIBasedAppModelConfigFrom
+from core.app.app_config.entities import (
+    EasyUIBasedAppConfig,
+    EasyUIBasedAppModelConfigFrom,
+)
 from core.app.apps.base_app_generator import BaseAppGenerator
-from core.app.apps.base_app_queue_manager import AppQueueManager, GenerateTaskStoppedError
+from core.app.apps.base_app_queue_manager import (
+    AppQueueManager,
+    GenerateTaskStoppedError,
+)
 from core.app.entities.app_invoke_entities import (
     AdvancedChatAppGenerateEntity,
     AgentChatAppGenerateEntity,
@@ -23,14 +29,27 @@ from core.app.entities.task_entities import (
     CompletionAppBlockingResponse,
     CompletionAppStreamResponse,
 )
-from core.app.task_pipeline.easy_ui_based_generate_task_pipeline import EasyUIBasedGenerateTaskPipeline
+from core.app.task_pipeline.easy_ui_based_generate_task_pipeline import (
+    EasyUIBasedGenerateTaskPipeline,
+)
 from core.prompt.utils.prompt_template_parser import PromptTemplateParser
 from extensions.ext_database import db
 from models import Account
 from models.enums import CreatedByRole
-from models.model import App, AppMode, AppModelConfig, Conversation, EndUser, Message, MessageFile
+from models.model import (
+    App,
+    AppMode,
+    AppModelConfig,
+    Conversation,
+    EndUser,
+    Message,
+    MessageFile,
+)
 from services.errors.app_model_config import AppModelConfigBrokenError
-from services.errors.conversation import ConversationCompletedError, ConversationNotExistsError
+from services.errors.conversation import (
+    ConversationCompletedError,
+    ConversationNotExistsError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +70,9 @@ class MessageBasedAppGenerator(BaseAppGenerator):
     ) -> Union[
         ChatbotAppBlockingResponse,
         CompletionAppBlockingResponse,
-        Generator[Union[ChatbotAppStreamResponse, CompletionAppStreamResponse], None, None],
+        Generator[
+            Union[ChatbotAppStreamResponse, CompletionAppStreamResponse], None, None
+        ],
     ]:
         """
         Handle response.
@@ -75,10 +96,14 @@ class MessageBasedAppGenerator(BaseAppGenerator):
         try:
             return generate_task_pipeline.process()
         except ValueError as e:
-            if len(e.args) > 0 and e.args[0] == "I/O operation on closed file.":  # ignore this error
+            if (
+                len(e.args) > 0 and e.args[0] == "I/O operation on closed file."
+            ):  # ignore this error
                 raise GenerateTaskStoppedError()
             else:
-                logger.exception(f"Failed to handle response, conversation_id: {conversation.id}")
+                logger.exception(
+                    f"Failed to handle response, conversation_id: {conversation.id}"
+                )
                 raise e
 
     def _get_conversation_by_user(
@@ -94,9 +119,13 @@ class MessageBasedAppGenerator(BaseAppGenerator):
         if isinstance(user, Account):
             conversation_filter.append(Conversation.from_account_id == user.id)
         else:
-            conversation_filter.append(Conversation.from_end_user_id == user.id if user else None)
+            conversation_filter.append(
+                Conversation.from_end_user_id == user.id if user else None
+            )
 
-        conversation = db.session.query(Conversation).filter(and_(*conversation_filter)).first()
+        conversation = (
+            db.session.query(Conversation).filter(and_(*conversation_filter)).first()
+        )
 
         if not conversation:
             raise ConversationNotExistsError()
@@ -106,20 +135,30 @@ class MessageBasedAppGenerator(BaseAppGenerator):
 
         return conversation
 
-    def _get_app_model_config(self, app_model: App, conversation: Optional[Conversation] = None) -> AppModelConfig:
+    def _get_app_model_config(
+        self, app_model: App, conversation: Optional[Conversation] = None
+    ) -> AppModelConfig:
+        # NOTE: 可用发现，所有的app信息都是存储在sql里的
+        # 但是一开始这个conversation是空的呀
         if conversation:
             app_model_config = (
                 db.session.query(AppModelConfig)
-                .filter(AppModelConfig.id == conversation.app_model_config_id, AppModelConfig.app_id == app_model.id)
+                .filter(
+                    AppModelConfig.id == conversation.app_model_config_id,
+                    AppModelConfig.app_id == app_model.id,
+                )
                 .first()
             )
 
             if not app_model_config:
                 raise AppModelConfigBrokenError()
         else:
+            # NOTE: 如果是第一次会话，那么app_model里的app_model_config_id必须存在
+            # 可恶这个又是一个uuid类对象
             if app_model.app_model_config_id is None:
                 raise AppModelConfigBrokenError()
 
+            # NOTE: 根据app_model_config_id去获取对应的模型配置
             app_model_config = app_model.app_model_config
 
             if not app_model_config:
@@ -143,12 +182,17 @@ class MessageBasedAppGenerator(BaseAppGenerator):
         :conversation conversation
         :return:
         """
-        app_config: EasyUIBasedAppConfig = cast(EasyUIBasedAppConfig, application_generate_entity.app_config)
+        app_config: EasyUIBasedAppConfig = cast(
+            EasyUIBasedAppConfig, application_generate_entity.app_config
+        )
 
         # get from source
         end_user_id = None
         account_id = None
-        if application_generate_entity.invoke_from in {InvokeFrom.WEB_APP, InvokeFrom.SERVICE_API}:
+        if application_generate_entity.invoke_from in {
+            InvokeFrom.WEB_APP,
+            InvokeFrom.SERVICE_API,
+        }:
             from_source = "api"
             end_user_id = application_generate_entity.user_id
         else:
@@ -165,11 +209,15 @@ class MessageBasedAppGenerator(BaseAppGenerator):
             model_provider = application_generate_entity.model_conf.provider
             model_id = application_generate_entity.model_conf.model
             override_model_configs = None
-            if app_config.app_model_config_from == EasyUIBasedAppModelConfigFrom.ARGS and app_config.app_mode in {
-                AppMode.AGENT_CHAT,
-                AppMode.CHAT,
-                AppMode.COMPLETION,
-            }:
+            if (
+                app_config.app_model_config_from == EasyUIBasedAppModelConfigFrom.ARGS
+                and app_config.app_mode
+                in {
+                    AppMode.AGENT_CHAT,
+                    AppMode.CHAT,
+                    AppMode.COMPLETION,
+                }
+            ):
                 override_model_configs = app_config.app_model_config_dict
 
         # get conversation introduction
@@ -181,7 +229,9 @@ class MessageBasedAppGenerator(BaseAppGenerator):
                 app_model_config_id=app_model_config_id,
                 model_provider=model_provider,
                 model_id=model_id,
-                override_model_configs=json.dumps(override_model_configs) if override_model_configs else None,
+                override_model_configs=json.dumps(override_model_configs)
+                if override_model_configs
+                else None,
                 mode=app_config.app_mode.value,
                 name="New conversation",
                 inputs=application_generate_entity.inputs,
@@ -206,7 +256,9 @@ class MessageBasedAppGenerator(BaseAppGenerator):
             app_id=app_config.app_id,
             model_provider=model_provider,
             model_id=model_id,
-            override_model_configs=json.dumps(override_model_configs) if override_model_configs else None,
+            override_model_configs=json.dumps(override_model_configs)
+            if override_model_configs
+            else None,
             conversation_id=conversation.id,
             inputs=application_generate_entity.inputs,
             query=application_generate_entity.query or "",
@@ -218,7 +270,9 @@ class MessageBasedAppGenerator(BaseAppGenerator):
             answer_tokens=0,
             answer_unit_price=0,
             answer_price_unit=0,
-            parent_message_id=getattr(application_generate_entity, "parent_message_id", None),
+            parent_message_id=getattr(
+                application_generate_entity, "parent_message_id", None
+            ),
             provider_response_latency=0,
             total_price=0,
             currency="USD",
@@ -240,7 +294,9 @@ class MessageBasedAppGenerator(BaseAppGenerator):
                 belongs_to="user",
                 url=file.remote_url,
                 upload_file_id=file.related_id,
-                created_by_role=(CreatedByRole.ACCOUNT if account_id else CreatedByRole.END_USER),
+                created_by_role=(
+                    CreatedByRole.ACCOUNT if account_id else CreatedByRole.END_USER
+                ),
                 created_by=account_id or end_user_id or "",
             )
             db.session.add(message_file)
@@ -248,7 +304,9 @@ class MessageBasedAppGenerator(BaseAppGenerator):
 
         return conversation, message
 
-    def _get_conversation_introduction(self, application_generate_entity: AppGenerateEntity) -> str:
+    def _get_conversation_introduction(
+        self, application_generate_entity: AppGenerateEntity
+    ) -> str:
         """
         Get conversation introduction
         :param application_generate_entity: application generate entity
@@ -261,7 +319,9 @@ class MessageBasedAppGenerator(BaseAppGenerator):
             try:
                 inputs = application_generate_entity.inputs
                 prompt_template = PromptTemplateParser(template=introduction)
-                prompt_inputs = {k: inputs[k] for k in prompt_template.variable_keys if k in inputs}
+                prompt_inputs = {
+                    k: inputs[k] for k in prompt_template.variable_keys if k in inputs
+                }
                 introduction = prompt_template.format(prompt_inputs)
             except KeyError:
                 pass
@@ -274,7 +334,11 @@ class MessageBasedAppGenerator(BaseAppGenerator):
         :param conversation_id: conversation id
         :return: conversation
         """
-        conversation = db.session.query(Conversation).filter(Conversation.id == conversation_id).first()
+        conversation = (
+            db.session.query(Conversation)
+            .filter(Conversation.id == conversation_id)
+            .first()
+        )
 
         if not conversation:
             raise ConversationNotExistsError()

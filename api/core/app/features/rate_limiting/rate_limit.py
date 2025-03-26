@@ -27,6 +27,7 @@ class RateLimit:
             cls._instance_dict[client_id] = instance
         return cls._instance_dict[client_id]
 
+    # NOTE: 限制交易量，但是这里只有2个参数呀
     def __init__(self, client_id: str, max_active_requests: int):
         self.max_active_requests = max_active_requests
         if hasattr(self, "initialized"):
@@ -41,6 +42,7 @@ class RateLimit:
     def flush_cache(self, use_local_value=False):
         self.last_recalculate_time = time.time()
         # flush max active requests
+        # NOTE: 前者   后者判断的是请求量还没有达到上线的时候执行下述代码
         if use_local_value or not redis_client.exists(self.max_active_requests_key):
             # NOTE: redis pipeline支持通过TCP发送多个命令，将处理结果缓存等所有命令执行完成之后一起返回，
             # 但是当一次执行的pipeline命令过多时，容易撑爆缓存区
@@ -58,6 +60,8 @@ class RateLimit:
         # flush max active requests (in-transit request list)
         if not redis_client.exists(self.active_requests_key):
             return
+        # h表示哈希表操作，get all获取所有激活的key, 这儿本质就是对key进行是否操作的控制，
+        # 如果超时就删除超时的key
         request_details = redis_client.hgetall(self.active_requests_key)
         redis_client.expire(self.active_requests_key, timedelta(days=1))
         timeout_requests = [
@@ -87,7 +91,7 @@ class RateLimit:
                 "Too many requests. Please try again later. The current maximum "
                 "concurrent requests allowed is {}.".format(self.max_active_requests)
             )
-        # NOTE: 为当前的请求注册到redis里缓存
+        # NOTE: 将当前的请求注册到redis里缓存, h 哈希表操作
         redis_client.hset(self.active_requests_key, request_id, str(time.time()))
         return request_id
 
@@ -96,6 +100,7 @@ class RateLimit:
             return
         redis_client.hdel(self.active_requests_key, request_id)
 
+    # NOTE: 生成一个key，用于标识当前的交易
     @staticmethod
     def gen_request_key() -> str:
         return str(uuid.uuid4())
@@ -105,6 +110,7 @@ class RateLimit:
         generator: Union[Generator[str, None, None], Mapping[str, Any]],
         request_id: str,
     ):
+        # NOTE: 如果结果是字典，就直接返回了，所以这也也是支持流式与非流式的
         if isinstance(generator, Mapping):
             return generator
         else:
@@ -120,14 +126,17 @@ class RateLimitGenerator:
         generator: Generator[str, None, None],
         request_id: str,
     ):
+        # NOTE: 控制交易量
         self.rate_limit = rate_limit
         self.generator = generator
+        # NOTE: 唯一标识一次交易
         self.request_id = request_id
         self.closed = False
 
     def __iter__(self):
         return self
 
+    # NOTE: 这种生成器的写法是有意思的，可用自己结束生成操作
     def __next__(self):
         if self.closed:
             raise StopIteration
@@ -141,5 +150,6 @@ class RateLimitGenerator:
         if not self.closed:
             self.closed = True
             self.rate_limit.exit(self.request_id)
+            # NOTE: 这个关闭生成器是个什么操作，有点意思
             if self.generator is not None and hasattr(self.generator, "close"):
                 self.generator.close()

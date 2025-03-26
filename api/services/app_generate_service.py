@@ -37,10 +37,13 @@ class AppGenerateService:
         :param streaming: streaming
         :return:
         """
+        # NOTE: 每个应用应该有一个请求量上线
         max_active_request = AppGenerateService._get_max_active_requests(app_model)
         rate_limit = RateLimit(app_model.id, max_active_request)
+        # NOTE: 通过uuid随机生成一个请求id
         request_id = RateLimit.gen_request_key()
         try:
+            # NOTE: 本质上就是对当前请求进行管理，这里有一个请求队列，使用hash表实现
             request_id = rate_limit.enter(request_id)
             if app_model.mode == AppMode.COMPLETION.value:
                 return rate_limit.generate(
@@ -238,6 +241,7 @@ class AppGenerateService:
         :return:
         """
         workflow_service = WorkflowService()
+        # NOTE: 哦哦哦，debug的工作流和pbulish版本的工作流的workflow获取方式是不同的
         if invoke_from == InvokeFrom.DEBUGGER:
             # fetch draft workflow by app_model
             workflow = workflow_service.get_draft_workflow(app_model=app_model)

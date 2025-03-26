@@ -8,15 +8,26 @@ from flask import Flask, current_app
 from pydantic import ValidationError
 
 from configs import dify_config
-from core.app.app_config.easy_ui_based_app.model_config.converter import ModelConfigConverter
+from core.app.app_config.easy_ui_based_app.model_config.converter import (
+    ModelConfigConverter,
+)
 from core.app.app_config.features.file_upload.manager import FileUploadConfigManager
-from core.app.apps.base_app_queue_manager import AppQueueManager, GenerateTaskStoppedError, PublishFrom
+from core.app.apps.base_app_queue_manager import (
+    AppQueueManager,
+    GenerateTaskStoppedError,
+    PublishFrom,
+)
 from core.app.apps.completion.app_config_manager import CompletionAppConfigManager
 from core.app.apps.completion.app_runner import CompletionAppRunner
-from core.app.apps.completion.generate_response_converter import CompletionAppGenerateResponseConverter
+from core.app.apps.completion.generate_response_converter import (
+    CompletionAppGenerateResponseConverter,
+)
 from core.app.apps.message_based_app_generator import MessageBasedAppGenerator
 from core.app.apps.message_based_app_queue_manager import MessageBasedAppQueueManager
-from core.app.entities.app_invoke_entities import CompletionAppGenerateEntity, InvokeFrom
+from core.app.entities.app_invoke_entities import (
+    CompletionAppGenerateEntity,
+    InvokeFrom,
+)
 from core.model_runtime.errors.invoke import InvokeAuthorizationError
 from core.ops.ops_trace_manager import TraceQueueManager
 from extensions.ext_database import db
@@ -59,6 +70,7 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
         streaming: bool = False,
     ) -> Union[Mapping[str, Any], Generator[str | Mapping[str, Any], None, None]]: ...
 
+    # NOTE: CompletionAppGenerator 的具体实现
     def generate(
         self,
         app_model: App,
@@ -76,10 +88,12 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
         :param invoke_from: invoke from source
         :param stream: is stream
         """
+        # NOTE: 获取query，并且要求query一定是字符串，没意思
         query = args["query"]
         if not isinstance(query, str):
             raise ValueError("query must be a string")
 
+        # NOTE: 去除不可见字符
         query = query.replace("\x00", "")
         inputs = args["inputs"]
 
@@ -87,7 +101,9 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
         conversation = None
 
         # get app model config
-        app_model_config = self._get_app_model_config(app_model=app_model, conversation=conversation)
+        app_model_config = self._get_app_model_config(
+            app_model=app_model, conversation=conversation
+        )
 
         # validate override model config
         override_model_config_dict = None
@@ -102,7 +118,9 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
 
         # parse files
         files = args["files"] if args.get("files") else []
-        file_extra_config = FileUploadConfigManager.convert(override_model_config_dict or app_model_config.to_dict())
+        file_extra_config = FileUploadConfigManager.convert(
+            override_model_config_dict or app_model_config.to_dict()
+        )
         if file_extra_config:
             file_objs = file_factory.build_from_mappings(
                 mappings=files,
@@ -114,7 +132,9 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
 
         # convert to app config
         app_config = CompletionAppConfigManager.get_app_config(
-            app_model=app_model, app_model_config=app_model_config, override_config_dict=override_model_config_dict
+            app_model=app_model,
+            app_model_config=app_model_config,
+            override_config_dict=override_model_config_dict,
         )
 
         # get tracing instance
@@ -127,7 +147,9 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
             model_conf=ModelConfigConverter.convert(app_config),
             file_upload_config=file_extra_config,
             inputs=self._prepare_user_inputs(
-                user_inputs=inputs, variables=app_config.variables, tenant_id=app_model.tenant_id
+                user_inputs=inputs,
+                variables=app_config.variables,
+                tenant_id=app_model.tenant_id,
             ),
             query=query,
             files=list(file_objs),
@@ -139,7 +161,9 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
         )
 
         # init generate records
-        (conversation, message) = self._init_generate_records(application_generate_entity)
+        (conversation, message) = self._init_generate_records(
+            application_generate_entity
+        )
 
         # init queue manager
         queue_manager = MessageBasedAppQueueManager(
@@ -174,7 +198,9 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
             stream=streaming,
         )
 
-        return CompletionAppGenerateResponseConverter.convert(response=response, invoke_from=invoke_from)
+        return CompletionAppGenerateResponseConverter.convert(
+            response=response, invoke_from=invoke_from
+        )
 
     def _generate_worker(
         self,
@@ -209,7 +235,8 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
                 pass
             except InvokeAuthorizationError:
                 queue_manager.publish_error(
-                    InvokeAuthorizationError("Incorrect API key provided"), PublishFrom.APPLICATION_MANAGER
+                    InvokeAuthorizationError("Incorrect API key provided"),
+                    PublishFrom.APPLICATION_MANAGER,
                 )
             except ValidationError as e:
                 logger.exception("Validation Error when generating")
@@ -246,9 +273,12 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
             .filter(
                 Message.id == message_id,
                 Message.app_id == app_model.id,
-                Message.from_source == ("api" if isinstance(user, EndUser) else "console"),
-                Message.from_end_user_id == (user.id if isinstance(user, EndUser) else None),
-                Message.from_account_id == (user.id if isinstance(user, Account) else None),
+                Message.from_source
+                == ("api" if isinstance(user, EndUser) else "console"),
+                Message.from_end_user_id
+                == (user.id if isinstance(user, EndUser) else None),
+                Message.from_account_id
+                == (user.id if isinstance(user, Account) else None),
             )
             .first()
         )
@@ -259,7 +289,10 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
         current_app_model_config = app_model.app_model_config
         more_like_this = current_app_model_config.more_like_this_dict
 
-        if not current_app_model_config.more_like_this or more_like_this.get("enabled", False) is False:
+        if (
+            not current_app_model_config.more_like_this
+            or more_like_this.get("enabled", False) is False
+        ):
             raise MoreLikeThisDisabledError()
 
         app_model_config = message.app_model_config
@@ -283,7 +316,9 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
 
         # convert to app config
         app_config = CompletionAppConfigManager.get_app_config(
-            app_model=app_model, app_model_config=app_model_config, override_config_dict=override_model_config_dict
+            app_model=app_model,
+            app_model_config=app_model_config,
+            override_config_dict=override_model_config_dict,
         )
 
         # init application generate entity
@@ -301,7 +336,9 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
         )
 
         # init generate records
-        (conversation, message) = self._init_generate_records(application_generate_entity)
+        (conversation, message) = self._init_generate_records(
+            application_generate_entity
+        )
 
         # init queue manager
         queue_manager = MessageBasedAppQueueManager(
@@ -336,4 +373,6 @@ class CompletionAppGenerator(MessageBasedAppGenerator):
             stream=stream,
         )
 
-        return CompletionAppGenerateResponseConverter.convert(response=response, invoke_from=invoke_from)
+        return CompletionAppGenerateResponseConverter.convert(
+            response=response, invoke_from=invoke_from
+        )

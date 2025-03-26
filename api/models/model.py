@@ -347,6 +347,7 @@ class App(Base):
         return tags or []
 
 
+# NOTE: 这里应该叫做App的配置，但是包含了模型的配置
 class AppModelConfig(Base):
     __tablename__ = "app_model_configs"
     __table_args__ = (

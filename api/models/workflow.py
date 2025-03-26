@@ -89,6 +89,7 @@ class Workflow(Base):
     - graph (text) Workflow canvas configuration (JSON)
       # 啊？这儿说图是使用json来配置的
 
+        # NOTE: 好好好，worklfow配置文件是以json格式配置的，包含了节点、边和一些配置信息
         The entire canvas configuration JSON, including Node, Edge, and other configurations
 
         - nodes (array[object]) Node list, see Node Schema
@@ -107,13 +108,16 @@ class Workflow(Base):
         db.Index("workflow_version_idx", "tenant_id", "app_id", "version"),
     )
 
+    # NOTE: 感觉workflow的大部分属性都是为了服务租户的，只有graph才是最重要的
     id: Mapped[str] = mapped_column(
         StringUUID, server_default=db.text("uuid_generate_v4()")
     )
     tenant_id: Mapped[str] = mapped_column(StringUUID, nullable=False)
     app_id: Mapped[str] = mapped_column(StringUUID, nullable=False)
     type: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    # NOTE: workflow属性里有一个version，看来可能可以做工作流的版本管理
     version: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    # NOTE: graph也是采用mysql的TEXT类型存储的，欸嘿，我也是
     graph: Mapped[str] = mapped_column(sa.Text)
     _features: Mapped[str] = mapped_column("features", sa.TEXT)
     created_by: Mapped[str] = mapped_column(StringUUID, nullable=False)
